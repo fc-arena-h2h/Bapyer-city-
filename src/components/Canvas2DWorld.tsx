@@ -58,6 +58,14 @@ interface ProceduralPatterns {
   plaza: CanvasPattern | null;
 }
 
+export const CAMERA_ANGLE_ZOOM_LEVELS: Record<1 | 2 | 3 | 4 | 5, number> = {
+  1: 1.0,  // ১: জেনারেল ভিউ (সাধারণ ক্লোজ ভিউ)
+  2: 0.78, // ২: মিডিয়াম ওভারহেড ভিউ (একটু উপর থেকে)
+  3: 0.60, // ৩: ড্রোন ভিউ (মাঝারি উচ্চতা থেকে)
+  4: 0.45, // ৪: হাই সিটি ভিউ (অনেক উপর থেকে)
+  5: 0.32, // ৫: ঈগল/বার্ডস-আই ম্যাপ ভিউ (সবচেয়ে উপর থেকে পুরো ম্যাপ)
+};
+
 function fillStrokeRoundedRect(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -360,7 +368,7 @@ export function stepWorldSimulation(
     }
 
     if (playerCar.type === 'POLICE_CRUISER' && playerCar.sirenOn) {
-      if (playerCar.sirenAudioCooldown <= 0) {
+      if ((playerCar.sirenAudioCooldown ?? 0) <= 0) {
         playerCar.sirenAudioCooldown = 0.72;
         sound.playPoliceSiren(10);
       }
@@ -481,14 +489,36 @@ export function stepWorldSimulation(
       }
     }
   } else {
-    // Player on-foot movement
-    const walkSpeed = 242;
-    player.vx = inputX * walkSpeed;
-    player.vy = inputY * walkSpeed;
+    // Player on-foot movement: Normal Walk Mode (132 px/s) vs Run Button Mode (258 px/s)
+    const isRunningMode = Boolean(
+      player.isRunning ||
+        keys['ShiftLeft'] ||
+        keys['ShiftRight'] ||
+        keys['shift']
+    );
+    const moveSpeed = isRunningMode ? 258 : 132;
+    player.vx = inputX * moveSpeed;
+    player.vy = inputY * moveSpeed;
 
-    if (Math.hypot(inputX, inputY) > 0.05) {
+    const inputMag = Math.hypot(inputX, inputY);
+    if (inputMag > 0.05) {
       player.angle = Math.atan2(inputY, inputX);
-      player.walkCycle += dt * 12;
+      player.walkCycle += dt * (isRunningMode ? 14.5 : 7.5);
+
+      // Subtle sprint dust trail when running fast in Run Mode
+      if (isRunningMode && inputMag > 0.35 && Math.random() < dt * 16) {
+        w.particles.push({
+          x: player.x - Math.cos(player.angle) * 12 + (Math.random() - 0.5) * 8,
+          y: player.y - Math.sin(player.angle) * 12 + (Math.random() - 0.5) * 8,
+          vx: -Math.cos(player.angle) * 28 + (Math.random() - 0.5) * 18,
+          vy: -Math.sin(player.angle) * 28 + (Math.random() - 0.5) * 18,
+          color: '#cbd5e1',
+          size: 2.5 + Math.random() * 2,
+          alpha: 0.65,
+          life: 0.26,
+          maxLife: 0.26,
+        });
+      }
     }
 
     const nextPos = resolveCircleBuildingCollision(
@@ -529,7 +559,7 @@ export function stepWorldSimulation(
     if (fd.life <= 0) w.floatingDamages.splice(i, 1);
   }
 
-  // 8. Smooth Camera Damping
+  // 8. Smooth Camera Damping & 5-Level Camera Angle Zoom Interpolation
   const damp = 1 - Math.exp(-8 * dt);
   const lookAheadX =
     playerCar && player.inVehicleSeat === 'driver'
@@ -546,6 +576,11 @@ export function stepWorldSimulation(
     w.camera.x += (targetCamX - w.camera.x) * damp;
     w.camera.y += (targetCamY - w.camera.y) * damp;
   }
+
+  const angleLevel = (w.camera.angleLevel || 1) as 1 | 2 | 3 | 4 | 5;
+  const targetZoom = CAMERA_ANGLE_ZOOM_LEVELS[angleLevel] ?? 1.0;
+  const currentZoom = w.camera.zoom ?? 1.0;
+  w.camera.zoom = currentZoom + (targetZoom - currentZoom) * Math.min(1, dt * 8.5);
 
   if (w.camera.shake > 0) {
     w.camera.shake = Math.max(0, w.camera.shake - 28 * dt);
@@ -746,7 +781,7 @@ function stepAllVehicles(
 
   for (const v of vehicles) {
     if (v.hitCooldown > 0) v.hitCooldown = Math.max(0, v.hitCooldown - dt);
-    if (v.sirenAudioCooldown > 0) v.sirenAudioCooldown = Math.max(0, v.sirenAudioCooldown - dt);
+    if (v.sirenAudioCooldown && v.sirenAudioCooldown > 0) v.sirenAudioCooldown = Math.max(0, v.sirenAudioCooldown - dt);
 
     if (player.inVehicleId === v.id && player.inVehicleSeat === 'driver') {
       continue;
@@ -768,7 +803,7 @@ function stepAllVehicles(
     if (isPolicePursuit && driver) {
       v.sirenOn = true;
       // Strictly play Police Siren ONLY when within hearing range of player
-      if (v.sirenAudioCooldown <= 0 && distToPlayer <= MAX_SFX_HEARING_DIST + 40) {
+      if ((v.sirenAudioCooldown ?? 0) <= 0 && distToPlayer <= MAX_SFX_HEARING_DIST + 40) {
         v.sirenAudioCooldown = 0.68;
         sound.playPoliceSiren(distToPlayer);
       }
@@ -930,7 +965,7 @@ function stepAllVehicles(
       // Authentic Dhaka Bus Conductor Calls ONLY when bus is right near the player (<= 250px)
       if (
         v.type === 'DHAKA_BUS' &&
-        v.sirenAudioCooldown <= 0 &&
+        (v.sirenAudioCooldown ?? 0) <= 0 &&
         distToPlayer <= MAX_VOICE_HEARING_DIST
       ) {
         v.sirenAudioCooldown = 6.2;
@@ -948,7 +983,7 @@ function stepAllVehicles(
       // Authentic Dhaka Rickshaw Bell ("ক্রিং ক্রিং!") ONLY when rickshaw is right near the player (<= 250px)
       if (
         v.type === 'RICKSHAW' &&
-        v.sirenAudioCooldown <= 0 &&
+        (v.sirenAudioCooldown ?? 0) <= 0 &&
         distToPlayer <= MAX_VOICE_HEARING_DIST
       ) {
         v.sirenAudioCooldown = 4.8;
@@ -1121,15 +1156,15 @@ function stepFootballMatch(w: WorldSimulationRef, dt: number) {
   if (inGoalMouthY && (ball.x <= pitchLeft + 8 || ball.x >= pitchRight - 8)) {
     const scoredRight = ball.x >= pitchRight - 8;
     if (scoredRight) {
-      ball.homeScore += 1;
+      ball.homeScore = (ball.homeScore ?? 0) + 1;
     } else {
-      ball.awayScore += 1;
+      ball.awayScore = (ball.awayScore ?? 0) + 1;
     }
     ball.goalCelebrationTimer = 3.2;
 
     const playerNearStadium =
       Math.hypot(w.player.x - pitchMidX, w.player.y - pitchMidY) < 620;
-    const playerScored = ball.lastTouchedBy.includes('আপনি');
+    const playerScored = (ball.lastTouchedBy ?? '').includes('আপনি');
 
     if (playerScored) {
       const goalReward = 800;
@@ -1376,7 +1411,9 @@ function stepAllCommunityNPCs(
     npc.speechCooldown -= dt;
     if (npc.speechCooldown <= 0) {
       npc.speechCooldown = 5.2 + Math.random() * 4.5;
-      const bank = NPC_DIALOGUE_BANKS[npc.id] || NPC_DIALOGUE_BANKS.viper;
+      const bank = NPC_DIALOGUE_BANKS[npc.id];
+      if (!bank) continue;
+
       let newLine = npc.speech;
 
       if (
@@ -1391,18 +1428,18 @@ function stepAllCommunityNPCs(
         newLine = pickRandomLine(MICHIL_SLOGANS);
         w.activeMichilSlogan = newLine;
       } else if (npc.id === 'kader_bus') {
-        newLine = pickRandomLine(BUS_CONDUCTOR_CALLS);
-      } else if (
-        !npc.speaksEnglishOnly &&
-        (npc.role === 'CHANDABAJ' ||
-          npc.role === 'STREET_CRIMINAL' ||
-          npc.role === 'QUARRELER' ||
-          Math.random() < 0.28)
-      ) {
-        newLine =
-          Math.random() < 0.55
-            ? pickRandomLine(FUNNY_DHAKA_DIALOGUES)
-            : pickRandomLine(bank.idle);
+        newLine = pickRandomLine(bank.idle); // kader_bus idle has calls
+      } else if (bank.roleSpecificLines && Math.random() < 0.35) {
+        // Find a nearby NPC to speak to!
+        const nearbyOther = npcs.find(
+          (n) => n.id !== npc.id && n.hp > 0 && Math.hypot(n.x - npc.x, n.y - npc.y) < 160
+        );
+        if (nearbyOther && bank.roleSpecificLines?.[nearbyOther.role]) {
+          newLine = pickRandomLine(bank.roleSpecificLines[nearbyOther.role]);
+          npc.analysis.socialTargetName = nearbyOther.bengaliName.split(' ')[0];
+        } else {
+          newLine = pickRandomLine(bank.idle);
+        }
       } else if (npc.analysis.socialTargetName && Math.random() < 0.45) {
         newLine = pickRandomLine(bank.socialChat);
       } else {
@@ -2032,10 +2069,22 @@ function draw2DWorld(
   const shakeX = w.camera.shake > 0 ? (Math.random() - 0.5) * w.camera.shake : 0;
   const shakeY = w.camera.shake > 0 ? (Math.random() - 0.5) * w.camera.shake : 0;
 
-  const camX = (Number.isFinite(w.camera.x) ? w.camera.x : 1450) - viewW / 2 + shakeX;
-  const camY = (Number.isFinite(w.camera.y) ? w.camera.y : 1020) - viewH / 2 + shakeY;
+  const zoom = Math.max(0.25, Math.min(1.5, w.camera.zoom ?? 1.0));
+  const camCenterX = (Number.isFinite(w.camera.x) ? w.camera.x : 1450) + shakeX;
+  const camCenterY = (Number.isFinite(w.camera.y) ? w.camera.y : 1020) + shakeY;
 
-  ctx.translate(-camX, -camY);
+  ctx.translate(viewW / 2, viewH / 2);
+  ctx.scale(zoom, zoom);
+  ctx.translate(-camCenterX, -camCenterY);
+
+  // Fill zoomed-out world water bounds so higher camera angles (1-5) show seamless textured water
+  ctx.fillStyle = patterns?.water || '#0284c7';
+  ctx.fillRect(
+    camCenterX - viewW / zoom,
+    camCenterY - viewH / zoom,
+    (viewW * 2) / zoom,
+    (viewH * 2) / zoom
+  );
 
   // 1. Island Seawall & Realistic Concrete Paver Sidewalk Base
   ctx.fillStyle = '#64748b';
@@ -2148,7 +2197,7 @@ function draw2DWorld(
   }
 
   // 15. 2.5D Perspective Landmark Buildings
-  draw25DBuildings(ctx, camX + viewW / 2, camY + viewH / 2, timeSec);
+  draw25DBuildings(ctx, camCenterX, camCenterY, timeSec);
 
   // 16. Swaying Tropical Palm & Banyan Trees
   for (const tree of PALM_TREES) {
@@ -3358,22 +3407,22 @@ function drawNPCOverheadUI(
   isTarget: boolean
 ) {
   const distToPlayer = Math.hypot(npc.x - playerX, npc.y - playerY);
-  if (distToPlayer > 360) return;
+  if (distToPlayer > 320) return;
 
   ctx.save();
   const baseX = npc.x;
-  const baseY = npc.y - 25;
+  const baseY = npc.y - 20;
 
   if (npc.placardText && npc.behavior !== 'MOB_CHASE') {
-    ctx.font = '700 7.5px Plus Jakarta Sans, sans-serif';
-    const pw = Math.max(82, ctx.measureText(npc.placardText).width + 10);
-    ctx.fillStyle = '#065f46';
+    ctx.font = '700 6.5px Plus Jakarta Sans, sans-serif';
+    const pw = Math.max(68, ctx.measureText(npc.placardText).width + 8);
+    ctx.fillStyle = 'rgba(6, 95, 70, 0.75)';
     ctx.strokeStyle = '#facc15';
-    ctx.lineWidth = 1;
-    fillStrokeRoundedRect(ctx, baseX - pw / 2, baseY + 2, pw, 12, 3, true, true);
+    ctx.lineWidth = 0.8;
+    fillStrokeRoundedRect(ctx, baseX - pw / 2, baseY + 2, pw, 10, 2, true, true);
     ctx.fillStyle = '#fef08a';
     ctx.textAlign = 'center';
-    ctx.fillText(`✊ ${npc.placardText}`, baseX, baseY + 10.5);
+    ctx.fillText(`✊ ${npc.placardText}`, baseX, baseY + 8.5);
   }
 
   const badgeColor = isTarget
@@ -3390,7 +3439,7 @@ function drawNPCOverheadUI(
             ? '#eab308'
             : npc.secondaryColor;
 
-  // Compact Mini Overhead Badge with Character Name + Wealth (৳) so player sees how rich everyone is!
+  // Even smaller compact badge
   const npcMoney = npc.money ?? 5000;
   const moneyStr =
     npcMoney >= 100000
@@ -3402,45 +3451,44 @@ function drawNPCOverheadUI(
   const shortName = npc.bengaliName.split(' ')[0];
   const badgeLabel = `${emotionEmoji}${shortName} · ${moneyStr}`;
 
-  ctx.font = '700 7.5px Plus Jakarta Sans, sans-serif';
-  const barW = Math.max(84, Math.min(124, ctx.measureText(badgeLabel).width + 10));
-  const barH = 3.2;
-  ctx.fillStyle = 'rgba(9, 8, 18, 0.86)';
+  ctx.font = '700 5.5px Plus Jakarta Sans, sans-serif';
+  const barW = Math.max(62, Math.min(100, ctx.measureText(badgeLabel).width + 6));
+  const barH = 1.8;
+  ctx.fillStyle = 'rgba(9, 8, 18, 0.7)';
   ctx.strokeStyle = badgeColor;
-  ctx.lineWidth = isTarget ? 1.5 : 0.9;
-  fillStrokeRoundedRect(ctx, baseX - barW / 2 - 4, baseY - 14, barW + 8, 16, 4, true, true);
+  ctx.lineWidth = isTarget ? 1.0 : 0.6;
+  fillStrokeRoundedRect(ctx, baseX - barW / 2 - 2, baseY - 10, barW + 4, 11, 2.5, true, true);
 
   ctx.textAlign = 'center';
   ctx.fillStyle = isTarget ? '#34d399' : '#fef08a';
-  ctx.fillText(badgeLabel, baseX, baseY - 5);
+  ctx.fillText(badgeLabel, baseX, baseY - 4.0);
 
   ctx.fillStyle = '#1e293b';
-  ctx.fillRect(baseX - barW / 2, baseY - 2.2, barW, barH);
+  ctx.fillRect(baseX - barW / 2, baseY - 2.0, barW, barH);
   ctx.fillStyle = badgeColor;
-  ctx.fillRect(baseX - barW / 2, baseY - 2.2, (Math.max(0, npc.hp) / npc.maxHp) * barW, barH);
+  ctx.fillRect(baseX - barW / 2, baseY - 2.0, (Math.max(0, npc.hp) / npc.maxHp) * barW, barH);
 
-  // Live Autonomous Thought Pill (নিজস্ব চিন্তাভাবনা ও সিদ্ধান্ত) when close to player
-  if (npc.ownThought && distToPlayer <= 230) {
-    ctx.font = '600 7px Plus Jakarta Sans, sans-serif';
+  // Tiny Thought Pill
+  if (npc.ownThought && distToPlayer <= 210) {
+    ctx.font = '600 5px Plus Jakarta Sans, sans-serif';
     const thoughtShort =
-      npc.ownThought.length > 38 ? npc.ownThought.slice(0, 38) + '…' : npc.ownThought;
-    const tw = Math.max(88, ctx.measureText(thoughtShort).width + 10);
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+      npc.ownThought.length > 28 ? npc.ownThought.slice(0, 28) + '…' : npc.ownThought;
+    const tw = Math.max(64, ctx.measureText(thoughtShort).width + 6);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
     ctx.strokeStyle = '#a855f7';
-    ctx.lineWidth = 0.9;
-    fillStrokeRoundedRect(ctx, baseX - tw / 2, baseY - 27, tw, 11, 3, true, true);
+    ctx.lineWidth = 0.6;
+    fillStrokeRoundedRect(ctx, baseX - tw / 2, baseY - 20, tw, 8, 2, true, true);
     ctx.fillStyle = '#e9d5ff';
     ctx.textAlign = 'center';
-    ctx.fillText(`💭 ${thoughtShort}`, baseX, baseY - 19);
+    ctx.fillText(`💭 ${thoughtShort}`, baseX, baseY - 14.5);
   }
 
-  // Compact Spoken Speech Bubble above Character ONLY when right around the player (<= MAX_VOICE_HEARING_DIST)
   const activeSpeakerId = sound.getActiveSpeakerId();
   const isCurrentlySpeaking = activeSpeakerId === npc.id;
 
   if (npc.speech && distToPlayer <= MAX_VOICE_HEARING_DIST) {
-    ctx.font = '600 8.5px Plus Jakarta Sans, sans-serif';
-    const maxBubbleW = 158;
+    ctx.font = '600 6.5px Plus Jakarta Sans, sans-serif';
+    const maxBubbleW = 140;
     const prefix = isCurrentlySpeaking ? '🔊 ' : '';
     const fullSpeech = prefix + npc.speech;
     const words = fullSpeech.split(' ');
@@ -3449,7 +3497,7 @@ function drawNPCOverheadUI(
 
     for (const word of words) {
       const test = currentLine ? `${currentLine} ${word}` : word;
-      if (ctx.measureText(test).width > maxBubbleW - 14 && currentLine) {
+      if (ctx.measureText(test).width > maxBubbleW - 12 && currentLine) {
         lines.push(currentLine);
         currentLine = word;
       } else {
@@ -3461,13 +3509,13 @@ function drawNPCOverheadUI(
     const displayLines = lines.slice(0, 2);
     const bubbleW = Math.min(
       maxBubbleW,
-      Math.max(76, ...displayLines.map((l) => ctx.measureText(l).width + 14))
+      Math.max(64, ...displayLines.map((l) => ctx.measureText(l).width + 12))
     );
-    const bubbleH = displayLines.length * 11 + 8;
+    const bubbleH = displayLines.length * 10 + 6;
     const bx = baseX - bubbleW / 2;
-    const by = baseY - 17 - bubbleH;
+    const by = baseY - 15 - bubbleH;
 
-    ctx.fillStyle = isCurrentlySpeaking ? 'rgba(15, 23, 42, 0.94)' : 'rgba(15, 23, 42, 0.82)';
+    ctx.fillStyle = isCurrentlySpeaking ? 'rgba(15, 23, 42, 0.88)' : 'rgba(15, 23, 42, 0.75)';
     ctx.strokeStyle = isCurrentlySpeaking
       ? '#facc15'
       : npc.behavior === 'MOB_CHASE'
@@ -3475,17 +3523,18 @@ function drawNPCOverheadUI(
         : isTarget
           ? '#10b981'
           : '#38bdf8';
-    ctx.lineWidth = isCurrentlySpeaking ? 1.6 : 1;
-    fillStrokeRoundedRect(ctx, bx, by, bubbleW, bubbleH, 5, true, true);
+    ctx.lineWidth = isCurrentlySpeaking ? 1.4 : 0.85;
+    fillStrokeRoundedRect(ctx, bx, by, bubbleW, bubbleH, 4, true, true);
 
     ctx.fillStyle = isCurrentlySpeaking ? '#fef08a' : '#f1f5f9';
     displayLines.forEach((line, idx) => {
-      ctx.fillText(line, baseX, by + 11 + idx * 11);
+      ctx.fillText(line, baseX, by + 10 + idx * 10);
     });
   }
 
   ctx.restore();
 }
+
 
 function drawHospitalPatientBed(
   ctx: CanvasRenderingContext2D,

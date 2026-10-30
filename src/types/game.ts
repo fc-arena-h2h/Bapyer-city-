@@ -291,6 +291,7 @@ export interface PlayerState {
   hp: number;
   maxHp: number;
   money: number; // পকেটের টাকা (৳)
+  isRunning?: boolean; // নরমাল হাঁটা (false) বনাম রান মোড (true)
   inVehicleId: string | null;
   inVehicleSeat: 'driver' | 'passenger' | null;
   inTrain: boolean;
@@ -308,10 +309,13 @@ export interface FootballState {
   y: number;
   vx: number;
   vy: number;
-  homeX: number;
-  homeY: number;
-  teamAScore: number;
-  teamBScore: number;
+  homeX?: number;
+  homeY?: number;
+  homeScore?: number;
+  awayScore?: number;
+  lastTouchedBy?: string;
+  teamAScore?: number;
+  teamBScore?: number;
   goalCelebrationTimer: number;
 }
 
@@ -370,6 +374,8 @@ export interface WorldSimulationRef {
     x: number;
     y: number;
     shake: number;
+    angleLevel?: 1 | 2 | 3 | 4 | 5;
+    zoom?: number;
   };
   hitstopTimer: number;
   mobAlertTimer: number;

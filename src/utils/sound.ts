@@ -10,6 +10,28 @@ interface QueuedSpeechItem {
   enqueuedAt: number;
 }
 
+interface CapacitorTTSPlugin {
+  speak: (options: {
+    text: string;
+    lang?: string;
+    rate?: number;
+    pitch?: number;
+    volume?: number;
+    category?: string;
+  }) => Promise<void>;
+  stop: () => Promise<void>;
+}
+
+interface WindowWithCapacitor extends Window {
+  Capacitor?: {
+    isNativePlatform?: () => boolean;
+    Plugins?: {
+      TextToSpeech?: CapacitorTTSPlugin;
+    };
+  };
+  webkitAudioContext?: typeof AudioContext;
+}
+
 class SoundManager {
   private ctx: AudioContext | null = null;
   public muted: boolean = false;
@@ -17,6 +39,8 @@ class SoundManager {
   private lastSpokenByNpc: Record<string, { text: string; time: number }> = {};
   private voicesLoaded: boolean = false;
   private cachedVoices: SpeechSynthesisVoice[] = [];
+  private activeAudioElement: HTMLAudioElement | null = null;
+  private audioUnlocked: boolean = false;
 
   // Sequential Turn-Taking Speech Queue State (একজনের কথা শেষ হলে আরেকজন বলবে)
   private currentSpeakingNpcId: string | null = null;
@@ -25,25 +49,49 @@ class SoundManager {
   private speechQueue: QueuedSpeechItem[] = [];
 
   constructor() {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      const loadVoices = () => {
-        this.cachedVoices = window.speechSynthesis.getVoices();
-        if (this.cachedVoices.length > 0) {
-          this.voicesLoaded = true;
+    if (typeof window !== 'undefined') {
+      if ('speechSynthesis' in window) {
+        const loadVoices = () => {
+          try {
+            this.cachedVoices = window.speechSynthesis.getVoices() || [];
+            if (this.cachedVoices.length > 0) {
+              this.voicesLoaded = true;
+            }
+          } catch {
+            // ignore
+          }
+        };
+        loadVoices();
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+      }
+
+      // Automatically unlock WebAudio & Mobile WebView Audio on first touch/click
+      const unlockAudioOnGesture = () => {
+        this.ensureContext();
+        if (!this.audioUnlocked && this.ctx && this.ctx.state === 'running') {
+          this.audioUnlocked = true;
         }
       };
-      loadVoices();
-      window.speechSynthesis.onvoiceschanged = loadVoices;
+
+      window.addEventListener('pointerdown', unlockAudioOnGesture, { passive: true });
+      window.addEventListener('touchstart', unlockAudioOnGesture, { passive: true });
+      window.addEventListener('click', unlockAudioOnGesture, { passive: true });
+      window.addEventListener('keydown', unlockAudioOnGesture, { passive: true });
     }
+  }
+
+  private getCapacitorTTS(): CapacitorTTSPlugin | null {
+    if (typeof window === 'undefined') return null;
+    const w = window as unknown as WindowWithCapacitor;
+    return w.Capacitor?.Plugins?.TextToSpeech || null;
   }
 
   private ensureContext(): AudioContext | null {
     if (this.muted) return null;
     try {
       if (!this.ctx && typeof window !== 'undefined') {
-        const AudioCtx =
-          window.AudioContext ||
-          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const w = window as unknown as WindowWithCapacitor;
+        const AudioCtx = window.AudioContext || w.webkitAudioContext;
         if (AudioCtx) {
           this.ctx = new AudioCtx();
         }
@@ -65,9 +113,8 @@ class SoundManager {
     volume: number,
     delay = 0
   ) {
-    if (volume <= 0.002) return;
     const ctx = this.ensureContext();
-    if (!ctx) return;
+    if (!ctx || volume <= 0.002) return;
     try {
       const now = ctx.currentTime + delay;
       const osc = ctx.createOscillator();
@@ -94,6 +141,155 @@ class SoundManager {
     }
   }
 
+  /**
+   * Explicitly resumes the AudioContext from a user gesture to satisfy mobile browser policies.
+   */
+  public async forceUnlockAudio(): Promise<boolean> {
+    const ctx = this.ensureContext();
+    if (!ctx) return false;
+    if (ctx.state === 'suspended') {
+      try {
+        await ctx.resume();
+      } catch {
+        return false;
+      }
+    }
+    this.audioUnlocked = ctx.state === 'running';
+    return this.audioUnlocked;
+  }
+
+
+  /**
+   * Plays an expressive humanoid formant syllable-by-syllable vocal cadence using WebAudio
+   * so that on ANY Android phone / APK WebView (even offline without a Bengali TTS voice pack),
+   * AI characters produce clearly audible, distinct male/female voices!
+   */
+  private playCharacterVocalFormants(
+    text: string,
+    pitch: number,
+    rate: number,
+    proximityVol: number,
+    isPrimaryFallback: boolean
+  ) {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    const cleanWords = text
+      .replace(/[.,!?।"'()—\-]/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    const syllableCount = isPrimaryFallback
+      ? Math.min(18, Math.max(5, cleanWords.length * 2))
+      : Math.min(5, Math.max(3, Math.ceil(text.length / 15)));
+
+    const basePitchHz = (pitch >= 1.18 ? 235 : 138) * Math.max(0.75, Math.min(1.45, pitch));
+    const speedFactor = Math.max(0.85, Math.min(1.35, rate));
+    const sylDur = (isPrimaryFallback ? 0.095 : 0.065) / speedFactor;
+    const sylGap = (isPrimaryFallback ? 0.125 : 0.08) / speedFactor;
+    const volScale = (isPrimaryFallback ? 0.22 : 0.085) * proximityVol;
+
+    // Vowel formant frequency pairs (F1, F2) for natural human-like speech resonance
+    const vowelFormants: Array<[number, number]> = [
+      [720, 1240], // 'আ' (aa)
+      [420, 1980], // 'এ' (e)
+      [310, 2250], // 'ই' (i)
+      [460, 920],  // 'ও' (o)
+      [340, 780],  // 'উ' (u)
+    ];
+
+    for (let i = 0; i < syllableCount; i++) {
+      const charCode = text.charCodeAt((i * 3) % Math.max(1, text.length)) || 65;
+      const [f1, f2] = vowelFormants[(charCode + i) % vowelFormants.length];
+      const inflection =
+        i === syllableCount - 1
+          ? 0.92
+          : 0.94 + ((charCode * 7 + i * 19) % 24) * 0.008;
+      const startF = basePitchHz * inflection;
+      const endF = startF * (i % 2 === 0 ? 1.09 : 0.93);
+      const delaySec = i * sylGap + (i > 0 && i % 4 === 0 ? 0.04 : 0);
+
+      try {
+        const now = ctx.currentTime + delaySec;
+        const osc = ctx.createOscillator();
+        const subOsc = ctx.createOscillator();
+        const filter1 = ctx.createBiquadFilter();
+        const filter2 = ctx.createBiquadFilter();
+        const gain = ctx.createGain();
+
+        osc.type = 'sawtooth';
+        subOsc.type = 'triangle';
+
+        osc.frequency.setValueAtTime(startF, now);
+        osc.frequency.linearRampToValueAtTime(endF, now + sylDur);
+
+        subOsc.frequency.setValueAtTime(startF * 0.5, now);
+        subOsc.frequency.linearRampToValueAtTime(endF * 0.5, now + sylDur);
+
+        filter1.type = 'bandpass';
+        filter1.frequency.setValueAtTime(f1 * (pitch >= 1.18 ? 1.12 : 1.0), now);
+        filter1.Q.setValueAtTime(4.5, now);
+
+        filter2.type = 'peaking';
+        filter2.frequency.setValueAtTime(f2 * (pitch >= 1.18 ? 1.12 : 1.0), now);
+        filter2.gain.setValueAtTime(8, now);
+        filter2.Q.setValueAtTime(3.0, now);
+
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(Math.max(0.002, volScale), now + sylDur * 0.22);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + sylDur);
+
+        osc.connect(filter1);
+        subOsc.connect(filter1);
+        filter1.connect(filter2);
+        filter2.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.onended = () => {
+          try {
+            osc.disconnect();
+            subOsc.disconnect();
+            filter1.disconnect();
+            filter2.disconnect();
+            gain.disconnect();
+          } catch {
+            // ignore
+          }
+        };
+
+        osc.start(now);
+        subOsc.start(now);
+        osc.stop(now + sylDur + 0.01);
+        subOsc.stop(now + sylDur + 0.01);
+      } catch {
+        // Ignore audio errors
+      }
+    }
+  }
+
+  private stopAllActiveSpeechEngines() {
+    const capTts = this.getCapacitorTTS();
+    if (capTts) {
+      capTts.stop().catch(() => {});
+    }
+    if (this.activeAudioElement) {
+      try {
+        this.activeAudioElement.pause();
+        this.activeAudioElement.src = '';
+      } catch {
+        // ignore
+      }
+      this.activeAudioElement = null;
+    }
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   private getProximityVolume(distanceToPlayer: number, maxDist: number, maxVol: number): number {
     if (distanceToPlayer > maxDist) return 0;
     const normalized = Math.max(0, 1 - distanceToPlayer / maxDist);
@@ -110,13 +306,7 @@ class SoundManager {
         clearTimeout(this.speechUnlockTimer);
         this.speechUnlockTimer = null;
       }
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        try {
-          window.speechSynthesis.cancel();
-        } catch {
-          // ignore
-        }
-      }
+      this.stopAllActiveSpeechEngines();
     }
   }
 
@@ -130,16 +320,8 @@ class SoundManager {
   public silenceIfTooFar(npcId: string, distanceToPlayer: number) {
     if (distanceToPlayer > MAX_VOICE_HEARING_DIST + 20) {
       this.speechQueue = this.speechQueue.filter((item) => item.npcId !== npcId);
-      if (
-        this.currentSpeakingNpcId === npcId &&
-        typeof window !== 'undefined' &&
-        'speechSynthesis' in window
-      ) {
-        try {
-          window.speechSynthesis.cancel();
-        } catch {
-          // ignore
-        }
+      if (this.currentSpeakingNpcId === npcId) {
+        this.stopAllActiveSpeechEngines();
         this.finishCurrentSpeechAndPlayNext();
       }
     } else {
@@ -182,6 +364,56 @@ class SoundManager {
     }
   }
 
+  /**
+   * Cloud TTS Audio Stream Fallback for Android WebView APK when speechSynthesis is silent
+   */
+  private tryPlayCloudTTSStream(
+    text: string,
+    hasBengali: boolean,
+    rate: number,
+    pitch: number,
+    proximityVol: number
+  ): boolean {
+    if (typeof window === 'undefined' || typeof Audio === 'undefined') return false;
+    try {
+      const cleanText = text.slice(0, 180).trim();
+      if (!cleanText) return false;
+      const tl = hasBengali ? 'bn' : 'en';
+      const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${tl}&q=${encodeURIComponent(
+        cleanText
+      )}`;
+      const audio = new Audio(url);
+      audio.volume = Math.max(0.25, Math.min(1.0, proximityVol));
+      audio.playbackRate = Math.max(0.85, Math.min(1.35, rate * (pitch > 1.15 ? 1.08 : 1.0)));
+      this.activeAudioElement = audio;
+
+      audio.onended = () => {
+        if (this.activeAudioElement === audio) {
+          this.activeAudioElement = null;
+        }
+        this.finishCurrentSpeechAndPlayNext();
+      };
+
+      audio.onerror = () => {
+        if (this.activeAudioElement === audio) {
+          this.activeAudioElement = null;
+        }
+        // Play expressive formant vocal synth if offline or stream blocked
+        this.playCharacterVocalFormants(text, pitch, rate, proximityVol, true);
+      };
+
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {
+          this.playCharacterVocalFormants(text, pitch, rate, proximityVol, true);
+        });
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private executeSpeechNow(item: QueuedSpeechItem) {
     if (this.muted || !this.voiceEnabled) return;
 
@@ -190,49 +422,81 @@ class SoundManager {
     this.lastSpokenByNpc[item.npcId] = { text: item.text, time: Date.now() };
 
     const ratio = Math.max(0, 1 - item.distanceToPlayer / MAX_VOICE_HEARING_DIST);
-    const proximityVol = Math.max(0.16, Math.min(1.0, ratio * ratio));
+    const proximityVol = Math.max(0.22, Math.min(1.0, ratio * ratio));
     const pitch = item.pitch ?? 1.0;
     const rate = item.rate ?? 1.04;
+    const hasBengali = /[\u0980-\u09FF]/.test(item.text);
 
-    // 1. Subtle expressive vocal syllabic synth murmur
-    const syllableCount = Math.min(4, Math.max(2, Math.ceil(item.text.length / 16)));
-    for (let i = 0; i < syllableCount; i++) {
-      const f = (240 + ((i * 47 + item.text.charCodeAt(0) * 3) % 120)) * pitch;
-      this.playTone(
-        'triangle',
-        f,
-        f * (i % 2 === 0 ? 1.12 : 0.9),
-        0.05,
-        0.045 * proximityVol,
-        i * 0.065
-      );
-    }
-
-    // Estimate speaking duration as safety fallback (in case browser onend doesn't fire)
+    // Estimate speaking duration as safety fallback (in case native/browser onend doesn't fire)
     const estimatedDurationMs = Math.min(
       6200,
-      Math.max(1800, item.text.length * 75)
+      Math.max(1900, item.text.length * 75)
     );
     if (this.speechUnlockTimer) clearTimeout(this.speechUnlockTimer);
     this.speechUnlockTimer = setTimeout(() => {
       this.finishCurrentSpeechAndPlayNext();
     }, estimatedDurationMs);
 
-    // 2. Browser Web Speech API Spoken Voice (One speaker at a time!)
+    // LAYER 1: Capacitor Native Android TextToSpeech Plugin (Best for installed Android APK!)
+    const capTts = this.getCapacitorTTS();
+    if (capTts) {
+      // Accompany with subtle vocal formant warmth
+      this.playCharacterVocalFormants(item.text, pitch, rate, proximityVol, false);
+      capTts
+        .speak({
+          text: item.text,
+          lang: hasBengali ? 'bn-BD' : 'en-US',
+          rate: Math.max(0.85, Math.min(1.3, rate)),
+          pitch: Math.max(0.65, Math.min(1.45, pitch)),
+          volume: proximityVol,
+          category: 'ambient',
+        })
+        .then(() => {
+          this.finishCurrentSpeechAndPlayNext();
+        })
+        .catch(() => {
+          // If 'bn-BD' locale is not installed on phone, try 'bn-IN' or fallback to Cloud TTS + Formants
+          capTts
+            .speak({
+              text: item.text,
+              lang: hasBengali ? 'bn-IN' : 'en-US',
+              rate: Math.max(0.85, Math.min(1.3, rate)),
+              pitch: Math.max(0.65, Math.min(1.45, pitch)),
+              volume: proximityVol,
+              category: 'ambient',
+            })
+            .then(() => {
+              this.finishCurrentSpeechAndPlayNext();
+            })
+            .catch(() => {
+              if (!this.tryPlayCloudTTSStream(item.text, hasBengali, rate, pitch, proximityVol)) {
+                this.playCharacterVocalFormants(item.text, pitch, rate, proximityVol, true);
+              }
+            });
+        });
+      return;
+    }
+
+    // LAYER 2: Browser Web Speech API (Only if speechSynthesis exists AND has voices loaded)
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       try {
         if (!this.voicesLoaded) {
-          this.cachedVoices = window.speechSynthesis.getVoices();
+          this.cachedVoices = window.speechSynthesis.getVoices() || [];
+          if (this.cachedVoices.length > 0) this.voicesLoaded = true;
         }
+      } catch {
+        // ignore
+      }
 
-        const utter = new SpeechSynthesisUtterance(item.text);
-        const hasBengali = /[\u0980-\u09FF]/.test(item.text);
-        utter.lang = hasBengali ? 'bn-BD' : 'en-US';
-        utter.pitch = Math.max(0.65, Math.min(1.45, pitch));
-        utter.rate = Math.max(0.88, Math.min(1.28, rate));
-        utter.volume = proximityVol;
+      if (this.cachedVoices.length > 0) {
+        try {
+          this.playCharacterVocalFormants(item.text, pitch, rate, proximityVol, false);
+          const utter = new SpeechSynthesisUtterance(item.text);
+          utter.lang = hasBengali ? 'bn-BD' : 'en-US';
+          utter.pitch = Math.max(0.65, Math.min(1.45, pitch));
+          utter.rate = Math.max(0.88, Math.min(1.28, rate));
+          utter.volume = proximityVol;
 
-        if (this.cachedVoices.length > 0) {
           if (hasBengali) {
             const bnVoice = this.cachedVoices.find(
               (v) =>
@@ -242,7 +506,6 @@ class SoundManager {
             );
             if (bnVoice) utter.voice = bnVoice;
           } else {
-            // Prioritize natural English Female Voice for English-speaking women
             const femaleEnVoice = this.cachedVoices.find(
               (v) =>
                 v.lang.toLowerCase().startsWith('en') &&
@@ -259,19 +522,49 @@ class SoundManager {
               utter.voice = fallbackEnVoice;
             }
           }
+
+          let startedSpeaking = false;
+          utter.onstart = () => {
+            startedSpeaking = true;
+          };
+          utter.onend = () => {
+            this.finishCurrentSpeechAndPlayNext();
+          };
+          utter.onerror = () => {
+            if (!startedSpeaking) {
+              if (!this.tryPlayCloudTTSStream(item.text, hasBengali, rate, pitch, proximityVol)) {
+                this.playCharacterVocalFormants(item.text, pitch, rate, proximityVol, true);
+              }
+            } else {
+              this.finishCurrentSpeechAndPlayNext();
+            }
+          };
+
+          window.speechSynthesis.speak(utter);
+
+          // Android WebView watchdog: if speechSynthesis didn't actually start within 350ms, trigger Cloud TTS / Formants!
+          setTimeout(() => {
+            if (
+              !startedSpeaking &&
+              this.currentSpeakingNpcId === item.npcId &&
+              !window.speechSynthesis.speaking
+            ) {
+              if (!this.tryPlayCloudTTSStream(item.text, hasBengali, rate, pitch, proximityVol)) {
+                this.playCharacterVocalFormants(item.text, pitch, rate, proximityVol, true);
+              }
+            }
+          }, 350);
+          return;
+        } catch {
+          // Fall through to Layer 3 & 4
         }
-
-        utter.onend = () => {
-          this.finishCurrentSpeechAndPlayNext();
-        };
-        utter.onerror = () => {
-          this.finishCurrentSpeechAndPlayNext();
-        };
-
-        window.speechSynthesis.speak(utter);
-      } catch {
-        this.finishCurrentSpeechAndPlayNext();
       }
+    }
+
+    // LAYER 3 & 4: Android WebView Fallback — Cloud TTS Stream + Expressive Multi-Syllable Formant Voice Synth
+    this.playCharacterVocalFormants(item.text, pitch, rate, proximityVol, false);
+    if (!this.tryPlayCloudTTSStream(item.text, hasBengali, rate, pitch, proximityVol)) {
+      this.playCharacterVocalFormants(item.text, pitch, rate, proximityVol, true);
     }
   }
 
@@ -340,13 +633,7 @@ class SoundManager {
         clearTimeout(this.speechUnlockTimer);
         this.speechUnlockTimer = null;
       }
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        try {
-          window.speechSynthesis.cancel();
-        } catch {
-          // ignore
-        }
-      }
+      this.stopAllActiveSpeechEngines();
       this.isCurrentlySpeaking = false;
       this.executeSpeechNow(queueItem);
       return;

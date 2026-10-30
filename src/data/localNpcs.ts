@@ -5,7 +5,7 @@ import {
   VehicleState,
 } from '../types/game';
 
-export interface RoleDialogueBank {
+export interface CharacterDialogueProfile {
   idle: string[];
   greetBn: string[];
   greetEn: string[];
@@ -21,6 +21,8 @@ export interface RoleDialogueBank {
   flee: string[];
   carReact: string[];
   socialChat: string[];
+  /** Strict interaction lines when speaking to specific roles (e.g. Doctor to Patient) */
+  roleSpecificLines?: Record<string, string[]>;
 }
 
 export const MICHIL_SLOGANS: string[] = [
@@ -51,7 +53,7 @@ export const FUNNY_DHAKA_DIALOGUES: string[] = [
   'খবরদার! তোরে কিন্তু সোজা মলম লাগাইয়া কমলাপুরের ট্রেনে তুইলা দিমু!',
 ];
 
-export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
+export const NPC_DIALOGUE_BANKS: Record<string, CharacterDialogueProfile> = {
   kader_bus: {
     idle: BUS_CONDUCTOR_CALLS,
     greetBn: [
@@ -200,6 +202,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
       'তানভীর, মিছিলের স্লোগান আরও জোরদার করো!',
       'ফুটপাতের একজন দোকানদারও যেন চাঁদাবাজদের হাতে নির্যাতিত না হয়!',
     ],
+    roleSpecificLines: {
+      'ACTIVIST': ['তানভীর, রাজপথে জনগণের শক্তি প্রদর্শন করো।', 'সুমন, ব্যানারগুলো সামনের সারিতে নিয়ে এসো।'],
+      'CHANDABAJ': ['কালা জাহাঙ্গীর, তোমার দিন শেষ হয়ে আসছে! জনগণের রাজপথে তোমার জায়গা নেই!', 'রনি, তুমিও সাবধান হয়ে যাও, অন্যায় সহ্য করা হবে না!'],
+    },
   },
 
   tanvir: {
@@ -252,6 +258,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
       'সুমন ভাই, ব্যানারটা উঁচু করে ধরো!',
       'নেতা মোবারক সাহেব আজ দারুণ বক্তৃতা দিচ্ছেন।',
     ],
+    roleSpecificLines: {
+      'POLITICAL_LEADER': ['নেতা মোবারক সাহেব, আমরা আপনার পেছনে আছি!', 'রাজপথের লড়াইয়ে আমরা কখনো পিছপা হবো না স্যার!'],
+      'ACTIVIST': ['সুমন ভাই, স্লোগান ধরো—নিরাপদ ঢাকা চাই!', 'আমাদের দাবি না মানলে রাজপথ ছাড়বো না!'],
+    },
   },
 
   sumon: {
@@ -286,6 +296,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['আরে বাপরে! এখানে তো বড় গণ্ডগোল লেগেছে!'],
     carReact: ['এই মিয়া, মিছিল দেখেও হর্ন বাজান কেন?!'],
     socialChat: ['স্লোগান জোরে দাও ভাই—নিরাপদ ঢাকা চাই!'],
+    roleSpecificLines: {
+      'POLITICAL_LEADER': ['মোবারক সাহেব, জনতা আজ জেগে উঠেছে!', 'স্লোগান দিন সবাই—জয় জনতার জয়!'],
+      'ACTIVIST': ['তানভীর ভাই, আমাদের মিছিল এগিয়ে যাচ্ছে!', 'এই তো শাহবাগ চত্বরে পৌঁছে গেছি!'],
+    },
   },
 
   jahangir: {
@@ -339,6 +353,11 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
       'এই রহিম, তোর ফুচকার ভ্যানের আজকের চাঁদা কই?',
       'ভাগ্নে রনি, পূর্ব দিকের দোকানগুলোর চাঁদা তুলেছিস?',
     ],
+    roleSpecificLines: {
+      'CHANDABAJ': ['রনি, ওই নতুন দোকানিকে একটু ভয় দেখাইয়া আয় তো!', 'শহরের এই এলাকা আমাদের কন্ট্রোলে থাকবে!'],
+      'VAN_VENDOR': ['রহিম, চাঁদার টাকা রেডি রাখ নইলে ভ্যান উল্টে দেবো!', 'মামা, বেশি বুঝিস না, আগে টাকা বের কর!'],
+      'SHOPKEEPER': ['চাচা, প্রতিদিনের মতো আজকেও টাকা বের করেন!', 'দোকানদারি করতে হলে চাঁদা দিতেই হবে!'],
+    },
   },
 
   roni_chandabaj: {
@@ -369,6 +388,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['মামা গো বাঁচাও! মানুষজন আমাকে ধরে মারছে!'],
     carReact: ['আরে! গাড়ি দিয়ে চাপা দিবি নাকি?!'],
     socialChat: ['চাচা, আজকের চায়ের দোকানের চাঁদাটা তাড়াতাড়ি দেন!'],
+    roleSpecificLines: {
+      'CHANDABAJ': ['মামা, দক্ষিণ দিকের সব দোকানের চাঁদা তোলা শেষ!', 'কালা জাহাঙ্গীর মামা, ওই দোকানি তো টাকা দিতে চাচ্ছে না!'],
+      'VAN_VENDOR': ['চাচা, আজকের চাঁদা না দিলে মালাই চার কেটলি নিয়ে যাবো!', 'রহিম মামা, দেরি করিস না, টাকা বের কর!'],
+    },
   },
 
   viper: {
@@ -461,9 +484,7 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     threatEn: [
       'Don’t hurt a poor vendor! The whole neighborhood and police will chase you!',
     ],
-    aggro: [
-      'আমার ফুচকার ভ্যান ভাঙবি?! এলাকাবাসী সবাই এদিকে আসুন, ওকে ধরুন!',
-    ],
+    aggro: ['আমার ফুচকার ভ্যান ভাঙবি?! এলাকাবাসী সবাই এদিকে আসুন, ওকে ধরুন!', 'ধর ওকে! আমার পেটে লাথি মারছে!'],
     flee: [
       'বাঁচাও গো! আমার ফুচকার ভ্যান ফেলে পালাতে হচ্ছে!',
     ],
@@ -474,6 +495,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
       'চাচা, এক কাপ আদা চা পাঠিয়েন তো আমার ভ্যানে!',
       'কালা জাহাঙ্গীরকে দেখলেই বুকটা কেঁপে ওঠে ভাই।',
     ],
+    roleSpecificLines: {
+      'CHANDABAJ': ['জাহাঙ্গীর ভাই, আজকের চাঁদা তো কালই দিলাম!', 'রনি, একটু ছাড় দাও না ভাই, আজ বিক্রি কম হয়েছে।'],
+      'SHOPKEEPER': ['হালিম চাচা, এক কাপ স্পেশাল চা দিয়েন তো!', 'রহিম মামা, আজ তো কাস্টমার কম মনে হচ্ছে।'],
+    },
   },
 
   chacha: {
@@ -487,7 +512,7 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
       'ভালো আছো তো? ঢাকার রাজনীতির খবর আর ফুটপাতের আড্ডা—সবই আমার এই চায়ের দোকানে চলে!',
     ],
     greetEn: [
-      'Sit down my friend! Best hot Malai tea and samosas on the Dhaka footpath!',
+      'Sit down my friend! Best hot Malai tea and sarsas on the Dhaka footpath!',
     ],
     tradeBn: [
       'এই নাও বাবা, স্পেশাল মালাই চা আর গরম সিঙ্গারা! তোমার হেলথ +20 HP বেড়ে গেছে!',
@@ -509,6 +534,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['ইয়া মাবুদ! চায়ের কেটলি ফেলে পালাতে হচ্ছে গো!'],
     carReact: ['আরে বাবা! ফুটপাতের চায়ের দোকানের ভেতর গাড়ি ঢুকিয়ে দেবে নাকি!'],
     socialChat: ['রহিম মিয়া, আজ চটপটিতে ঝাল একটু কম দিও বাবা!'],
+    roleSpecificLines: {
+      'VAN_VENDOR': ['রহিম, আজকের ফুচকা কিন্তু খুব টেস্টি হয়েছে!', 'মামা, এই নাও তোমার চা।'],
+      'CHANDABAJ': ['জাহাঙ্গীর, আর কত রক্ত চুষবি গরিবের?', 'রনি, এই বয়সে মাস্তানি করিস না বাবা, ভালো পথে আয়।'],
+    },
   },
 
   marco: {
@@ -542,6 +571,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['আরে ভাই, আমার কাচ্চির হাঁড়ি বাঁচাও!'],
     carReact: ['ওস্তাদ, ব্রেক চাপেন! বিরিয়ানির ভ্যানে ধাক্কা লাগবে তো!'],
     socialChat: ['চাচা, বিরিয়ানি খাওয়ার পর আপনার মালাই চা কিন্তু এক নম্বর!'],
+    roleSpecificLines: {
+      'SHOPKEEPER': ['হালিম চাচা, বিরিয়ানির সাথে আপনার চা কিন্তু দারুণ জমে!', 'চাচা, এক কাপ চা পাঠিয়ে দিয়েন।'],
+      'CHANDABAJ': ['জাহাঙ্গীর, বিরিয়ানি তো শেষ, চাঁদা কাল নিস!', 'রনি, ডিস্টার্ব করিস না, এখন অনেক কাস্টমার।'],
+    },
   },
 
   zara: {
@@ -576,6 +609,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['পুলিশ ভাই! তাড়াতাড়ি আসুন, মার্কেটের সামনে গণ্ডগোল লেগেছে!'],
     carReact: ['এই যে ড্রাইভার! দোকানের ওপর গাড়ি উঠিয়ে দেবেন নাকি?! সাবধানে চালান!'],
     socialChat: ['আজ শপিং মল আর নিউ মার্কেটে ক্রেতাদের বেশ ভিড় জমেছে!'],
+    roleSpecificLines: {
+      'CHANDABAJ': ['রনি, দোকানে ক্রেতা আছে, এখন চাঁদার কথা বোলো না!', 'জাহাঙ্গীর ভাই, একটু দেখে রেখো আমাদের।'],
+      'SHOPKEEPER': ['হালিম চাচা, এক কাপ লেবু চা দিন তো!', 'সোবহান ভাই, মাছের কি দাম আজকে?'],
+    },
   },
 
   karim_vendor: {
@@ -609,6 +646,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['আল্লাহ গো! ডাবের ভ্যান ফেলে পালাও!'],
     carReact: ['ভাইরে, নদীর পাড়ে আস্তে গাড়ি চালান!'],
     socialChat: ['আজ বুড়িগঙ্গা নদীর বাতাসটা বেশ ঠান্ডা আছে।'],
+    roleSpecificLines: {
+      'VAN_VENDOR': ['রহিম ভাই, ফুচকার সাথে ডাবের পানি কিন্তু সেরা!', 'সদরঘাটের কি খবর ভাই?'],
+      'CHANDABAJ': ['রনি, আজ ডাবের গাড়িটা ছাড়ো ভাই!', 'জাহাঙ্গীর ভাই, ডাব খাবেন নাকি?'],
+    },
   },
 
   vance: {
@@ -642,6 +683,11 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['কন্ট্রোল রুম, ব্যাকআপ পাঠান দ্রুত!'],
     carReact: ['এই গাড়িওয়ালা! ট্রাফিক আইন মেনে গাড়ি চালান!'],
     socialChat: ['সার্জেন্ট ডিয়াজ, পুলিশের গাড়ি নিয়ে শাহবাগ মোড়ে সতর্ক থাকো।'],
+    roleSpecificLines: {
+      'COP': ['সার্জেন্ট ডিয়াজ, টহল জোরদার করুন।', 'শহরে কোনো ক্রাইম হচ্ছে কি?'],
+      'CHANDABAJ': ['কালা জাহাঙ্গীর, তোমার দিন শেষ! আত্মসমর্পণ করো!', 'রনি, তোমাকেও হাজতে পাঠাবো!'],
+      'STREET_CRIMINAL': ['বিচ্ছু খোকন, তোমাকে আজকে ধরবোই!', 'শহরের শান্তি নষ্ট করা বন্ধ করো!'],
+    },
   },
 
   diaz: {
@@ -671,6 +717,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['হেডকোয়ার্টার, জরুরি সাহায্য পাঠান!'],
     carReact: ['ওই! পুলিশের গাড়িতে ধাক্কা মারছো কেন?! দেখে চালাও!'],
     socialChat: ['আজ শাহবাগে বড় মিছিল বের হয়েছে।'],
+    roleSpecificLines: {
+      'COP': ['ওসি ভ্যান্স, ব্যাকআপ প্রয়োজন!', 'প্যাট্রোল ভ্যান রেডি আছে স্যার।'],
+      'STREET_CRIMINAL': ['গাড়ি থামাও বলছি! পালাবার পথ নেই!', 'বিচ্ছু খোকন, তোমাকে ধাওয়া করছি!'],
+    },
   },
 
   rafiq_taxi: {
@@ -734,6 +784,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['পুলিশ ডাকুন দ্রুত! হাসপাতালে গণ্ডগোল শুরু হয়েছে!'],
     carReact: ['হাসপাতালের সামনে হর্ন বাজাবেন না এবং আস্তে গাড়ি চালান!'],
     socialChat: ['নার্স রুপা, ৩ নম্বর বেডের রোগীর স্যালাইনটা একটু চেক করো মা।'],
+    roleSpecificLines: {
+      'NURSE': ['রুপা, রোগীদের ওষুধের রিপোর্টগুলো কি আপডেট করেছ?', 'বেড নাম্বার ৪-এর রোগীকে ইনজেকশনটা দিয়ে দাও।'],
+      'PATIENT': ['আপনার প্রেশারটা চেক করি, একটু শান্ত হয়ে শুয়ে থাকুন।', 'এই ওষুধটা দিনে তিনবার খাবেন, ভয়ের কিছু নেই।'],
+    },
   },
 
   sophia_blogger: {
@@ -768,6 +822,11 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['ও মা গো! ক্যামেরা নিয়ে তাড়াতাড়ি নিরাপদ জায়গায় যাই!'],
     carReact: ['এই যে ভাইয়া! আমার ক্যামেরার ট্রাইপডটা দেখে গাড়ি চালান প্লিজ!'],
     socialChat: ['রহিম মামা, আপনার ফুচকার ভিডিওটা কিন্তু আজ ভাইরাল হয়েছে!'],
+    roleSpecificLines: {
+      'TOURIST': ['এমা, তোমার ভ্লগটা কিন্তু দারুন হয়েছে! লন্ডনের মানুষরা কি বাপের সিটি পছন্দ করছে?', 'চলো একসাথে একটা কোলাব ভ্লগ করি!'],
+      'JOGGER': ['নোরা, ফিটনেস ভ্লগটা আজ বিকেলেই আপলোড দেবো!', 'তোমার জগিংয়ের টিপসগুলো মানুষ খুব পছন্দ করছে।'],
+      'CHANDABAJ': ['কালা জাহাঙ্গীর, তোমার অন্যায়ের ভিডিও আজ লাইভ যাচ্ছে! তুমি পালাবার পথ পাবে না!'],
+    },
   },
 
   emma_tourist: {
@@ -802,6 +861,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['ও গড! তাড়াতাড়ি এখান থেকে সরে যেতে হবে!'],
     carReact: ['প্লিজ পার্কের হাঁটার রাস্তায় দেখে গাড়ি চালান!'],
     socialChat: ['পার্কের এই ফোয়ারাটার সামনে ছবি তুললে দারুণ আসে!'],
+    roleSpecificLines: {
+      'VLOGGER': ['সোফিয়া, তোমার ক্যামেরা দিয়ে আমার একটা ভালো ছবি তুলে দেবে কি?', 'বাপের সিটির মানুষরা কত আন্তরিক!'],
+      'JOGGER': ['নোরা, তোমার জগিং রুটটা কি রমনা লেকের চারপাশেই?', 'আমিও কি তোমার সাথে দৌড়াতে পারি?'],
+    },
   },
 
   nora_jogger: {
@@ -836,6 +899,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['পুলিশ ভাই! পার্কের ভেতর মারামারি লেগেছে!'],
     carReact: ['ওই! পার্কের ট্র্যাকের কাছে এত জোরে গাড়ি চালাচ্ছেন কেন?!'],
     socialChat: ['লেকের ধারে দৌড়াতে আজ দারুণ লাগছে!'],
+    roleSpecificLines: {
+      'VLOGGER': ['সোফিয়া, আমার কার্ডিও সেশনটা কি তোমার ভ্লগে দিচ্ছ?', 'ফিটনেসই আসল শক্তি ভাই!'],
+      'TOURIST': ['এমা, তুমিও কি জগিং শুরু করছ? বাপের সিটির পার্কটা কিন্তু দারুন!'],
+    },
   },
 
   claire_professor: {
@@ -870,6 +937,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['ক্যাম্পাস সিকিউরিটি! দ্রুত এদিকে আসুন!'],
     carReact: ['বিশ্ববিদ্যালয় ও হাসপাতালের সামনে অনুগ্রহ করে ধীরে গাড়ি চালান!'],
     socialChat: ['আমাদের শিক্ষার্থীরা শহরটাকে সুন্দর রাখতে দারুণ কাজ করছে।'],
+    roleSpecificLines: {
+      'ACTIVIST': ['তানভীর, স্লোগানগুলো যেন যুক্তিপূর্ণ হয়। রাজপথে জ্ঞান ও ন্যায়ের লড়াই চলবেই!', 'সুমন, ব্যানারগুলো সাবধানে রাখো।'],
+      'VLOGGER': ['সোফিয়া, তরুণ প্রজন্মের কাছে শিক্ষার গুরুত্ব নিয়ে একটা ভ্লগ করো।'],
+    },
   },
 
   nurse_rupa: {
@@ -904,6 +975,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['ডাক্তার আপা বাঁচান! ওয়ার্ডে সন্ত্রাসী ঢুকেছে!'],
     carReact: ['হাসপাতাল চত্বরে সাবধানে চলুন!'],
     socialChat: ['ডা. মায়া আপা, নতুন রোগীর ব্লাড প্রেসার নরমাল আছে।'],
+    roleSpecificLines: {
+      'MEDIC': ['মায়া আপা, ৪ নম্বর বেডের রোগীর জ্ঞান ফিরেছে।', 'জরুরি বিভাগে একজন নতুন রোগী এসেছে আপা।'],
+      'PATIENT': ['ভয় পাবেন না, আমি আপনার স্যালাইনটা ঠিক করে দিচ্ছি।', 'এই তো আপনার ড্রেসিং করা শেষ, এখন একটু বিশ্রাম নিন।'],
+    },
   },
 
   tania_mall: {
@@ -1134,6 +1209,9 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['ওরে বাপরে! মিউজিক বন্ধ কর, ক্লাবে মারামারি লেগেছে!'],
     carReact: ['ভাইরে! নাইট ক্লাবের দরজায় গাড়ি ঢুকিয়ে দিবি নাকি?!'],
     socialChat: ['মিলা আপু, পরের গানটা আরও জোরে গাও!'],
+    roleSpecificLines: {
+      'CLUB_DANCER': ['মিলা, বিটটা ফেলেছি, এবার তোমার পারফরম্যান্স দেখাও!', 'সবাইকে মাতিয়ে দাও মিলা!'],
+    },
   },
 
   mila_dancer: {
@@ -1168,6 +1246,9 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['হায় আল্লাহ! নাচের ফ্লোর ছেড়ে পালাই!'],
     carReact: ['এই যে! দেখে গাড়ি চালান!'],
     socialChat: ['ডিজে রকি ভাই, বিটটা আরও বাড়িয়ে দাও!'],
+    roleSpecificLines: {
+      'DJ': ['রকি ভাই, এই মিউজিকটা তো জাস্ট ফাটাফাটি!', 'পরের গানটা কি তুমি চালাবে?'],
+    },
   },
 
   jamal_striker: {
@@ -1202,6 +1283,9 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['আরে ভাই, ফুটবল ম্যাচ রেখে পালাতে হচ্ছে!'],
     carReact: ['ওই মিয়া! ফুটবল স্টেডিয়ামের ঘাসের ওপর গাড়ি ঢুকাবি না!'],
     socialChat: ['হামজা ভাই, ডান প্রান্ত দিয়ে বলটা ক্রস করো!'],
+    roleSpecificLines: {
+      'FOOTBALLER': ['হামজা, দ্রুত পাস দাও!', 'আজকের ম্যাচে আমরাই জিতবো!'],
+    },
   },
 
   hamza_player: {
@@ -1227,6 +1311,9 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['ওরে বাপরে! মাঠ ছেড়ে গ্যালারিতে পালাই!'],
     carReact: ['স্টেডিয়ামের গেটে গাড়ি হর্ন বাজাবেন না!'],
     socialChat: ['জামাল ভাই, দারুণ ড্রিবলিং হচ্ছে আজ!'],
+    roleSpecificLines: {
+      'FOOTBALLER': ['জামাল ভাই, বলটা ব্যাক পাস করছি!', 'গোলবারের দিকে নজর রাখুন!'],
+    },
   },
 
   oc_mobarak: {
@@ -1260,6 +1347,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['ব্যাকআপ পাঠাও! থানায় জরুরি অবস্থা!'],
     carReact: ['থানার গেটের সামনে গাড়ি নিয়ে স্টান্টবাজি করবেন না!'],
     socialChat: ['কনস্টেবল শমসের, লকআপের তালাটা ঠিকমতো চেক করেছ তো?'],
+    roleSpecificLines: {
+      'COP': ['শমসের, রাজপথে টহল জোরদার করো।', 'বিচ্ছু খোকনের কোনো খোঁজ পাওয়া গেছে?'],
+      'LOCKUP_PRISONER': ['আকবর, চুপচাপ হাজতে বসে থাকো, বেশি চিল্লাচিল্লি করো না।', 'তোমার জামিনের আবেদন নামঞ্জুর হয়েছে।'],
+    },
   },
 
   constable_shamser: {
@@ -1285,6 +1376,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['ওসি স্যার! এদিকে আসুন দ্রুত!'],
     carReact: ['থানার সামনে আস্তে গাড়ি চালান!'],
     socialChat: ['এই কয়েদি আকবর, হাজতের ভেতর চুপচাপ বসে থাক!'],
+    roleSpecificLines: {
+      'COP': ['ওসি স্যার, লকআপের পরিস্থিতি শান্ত আছে।', 'বাইরে টহল দিয়ে আসছি স্যার।'],
+      'LOCKUP_PRISONER': ['আকবর, আবার বেশি কথা বললে ডাবল মলম লাগাই দিমু!', 'খাবারের সময় হলে তোমাকে ডাকা হবে।'],
+    },
   },
 
   koyedi_akbar: {
@@ -1311,6 +1406,9 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['লোহার খাঁচার ভেতর কই পালামু আমি!'],
     carReact: ['হাজতের জানালা দিয়া গাড়ির শব্দ শুনি গো!'],
     socialChat: ['শমসের ভাই, এক গ্লাস পানি দেন না গো লকআপে!'],
+    roleSpecificLines: {
+      'COP': ['শমসের ভাই, আমারে আর মাইরেন না ভাই, আমি তওবা করছি!', 'ওসি স্যাররে একটু বুঝাইয়া বলেন না ভাই!'],
+    },
   },
 
   bicho_chora: {
@@ -1341,6 +1439,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['ওরে বাপরে! পুলিশ আর মেইন ক্যারেক্টার মিলে আমাকে ধরছে রে, পালা!'],
     carReact: ['ওই! গাড়ি দিয়া আমারে চাপা দিবি নাকি?!'],
     socialChat: ['পকেটে কয় টাকা আছে রে তোর? মলম লাগাই দিমু কিন্তু!'],
+    roleSpecificLines: {
+      'COP': ['ওই পুলিশ! ধরছস তো আমার ছায়া, আসল বিচ্ছু এখনো বাইরে!', 'তোদের পুলিশের গাড়ি আসার আগেই আমি উধাও হয়া যামু!'],
+      'CHANDABAJ': ['মামা, আজকের কামাই তো ভালোই হইছে, ভাগ নিবি নাকি?', 'কালা জাহাঙ্গীর মামারে বইলিস আমি উত্তর দিকে আছি।'],
+    },
   },
 
   haji_makbul: {
@@ -1349,7 +1451,7 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
       '🛒 মুদি দোকানে আসুন ভাই—সংসারের মাসের বাজার এক দোকানেই সেরে ফেলুন!',
     ],
     greetBn: [
-      'আসসালামু আলাইকুম ভাইজান! আমি হাজী মকবুল, বিসমিল্লাহ মুদি দোকান। চাল, ডাল, তেল নাকি ঠান্ডা দুধ ও বিস্কুট নেবেন (+25 HP)?',
+      'আসসালামু আলাইকুম ভাইজান! আমি হাজী মকবুল, বিসমিল্লাহ মুদি দোকান. চাল, ডাল, তেল নাকি ঠান্ডা দুধ ও বিস্কুট নেবেন (+25 HP)?',
     ],
     greetEn: [
       'Welcome to Bismillah Mudi Dokan! Rice, lentils, cooking oil, eggs, and snacks ready (+25 HP)!',
@@ -1374,6 +1476,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['ইয়া আল্লাহ! ক্যাশবাক্স সামলে পালাই!'],
     carReact: ['মুদি দোকানের ঝাঁপির ওপর গাড়ি লাগাইয়েন না ভাই!'],
     socialChat: ['আজ সয়াবিন তেল আর চালের বিক্রি মাশাআল্লাহ খুব ভালো!'],
+    roleSpecificLines: {
+      'VAN_VENDOR': ['রহিম, আজকের চালের দাম কিন্তু বেড়ে গেছে!', 'মামা, বিকেলের জন্য চা পাঠিয়ে দিয়েন।'],
+      'CHANDABAJ': ['জাহাঙ্গীর, আর কত রক্ত চুষবি? আল্লাহর গজব পড়বে!', 'রনি, ব্যবসা করতে দে বাবা।'],
+    },
   },
 
   sultan_chef: {
@@ -1440,6 +1546,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['হায় খোদা! আদালত কক্ষ থেকে নিরাপদে সরে যাই!'],
     carReact: ['জজ কোর্টের সামনে হর্ন বাজানো নিষেধ!'],
     socialChat: ['আজ হাইকোর্টে চাঁদাবাজদের বিরুদ্ধে কড়া রায় ঘোষণা হবে!'],
+    roleSpecificLines: {
+      'JUDGE': ['মাননীয় বিচারপতি, এই মামলার রিপোর্টগুলো পেশ করছি।', 'স্যার, আজকের শুনানির জন্য সব প্রস্তুত।'],
+      'OFFICE_EXECUTIVE': ['নাবিলা, নতুন কনট্রাক্ট পেপারগুলো কি রেডি?', 'অফিসিয়াল ফাইলগুলো একটু চেক করো।'],
+    },
   },
 
   garment_chairman: {
@@ -1473,6 +1583,10 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['ওরে বাপরে! ফ্যাক্টরি অফিস ছেড়ে পালাই!'],
     carReact: ['গার্মেন্টস গেটের সামনে দেখে গাড়ি চালান!'],
     socialChat: ['জরিনা মা, আজকের শিপমেন্টের সেলাইগুলো সময়মতো শেষ করো!'],
+    roleSpecificLines: {
+      'GARMENT_WORKER': ['জরিনা, প্রোডাকশন লাইনটা কি সচল আছে?', 'শিপিং সুপারভাইজারকে ডাকো।'],
+      'OFFICE_EXECUTIVE': ['নাবিলা, এক্সপোর্ট অর্ডারের ফাইলগুলো পাঠিয়ে দাও।'],
+    },
   },
 
   jorina_garment: {
@@ -1498,6 +1612,258 @@ export const NPC_DIALOGUE_BANKS: Record<string, RoleDialogueBank> = {
     flee: ['আল্লাহ গো! সেলাই মেশিন ছেড়ে পালাই!'],
     carReact: ['গার্মেন্টস ছুটির সময় রাস্তায় আস্তে গাড়ি চালান ভাই!'],
     socialChat: ['চেয়ারম্যান স্যার, এই মাসে আমাদের বোনাসটা একটু বাড়িয়ে দিয়েন!'],
+    roleSpecificLines: {
+      'GARMENT_WORKER': ['শিউলি, সুঁইটা কি বদলেছ?', 'আজকের টার্গেট কিন্তু অনেক বড়!'],
+      'GARMENT_CHAIRMAN': ['চেয়ারম্যান স্যার, আমাদের প্রোডাকশন সময়মতো শেষ হবে ইনশাআল্লাহ।'],
+    },
+  },
+
+  shiuli_garment: {
+    idle: ['🧵 এই শার্টের কলারটা ঠিকমতো বসছে না, আবার ট্রাই করি।', 'পদ্মা গার্মেন্টসে আজ কাজের চাপ অনেক!'],
+    greetBn: ['সালাম ভাই! আমি শিউলি, পদ্মা গার্মেন্টসে কাজ করি।'],
+    greetEn: ['Hello! I am Shiuli, a sewing operator at Padma Garments.'],
+    tradeBn: ['শ্রমিকদের ক্যান্টিন থেকে গরম চা আর টোস্ট বিস্কুট খান (+20 HP)!'],
+    tradeEn: ['Have some tea and biscuits from our worker canteen (+20 HP)!'],
+    cityInfoBn: ['আমাদের গার্মেন্টস ফ্যাক্টরির ভেতরে অনেক মেশিন আর কাপড় আছে!'],
+    cityInfoEn: ['Our factory floor is full of sewing machines and rolls of fabric!'],
+    apologyBn: ['ভুল হয়ে গেছে ভাইয়া, সরি!'],
+    apologyEn: ['My apologies, brother!'],
+    threatBn: ['গার্মেন্টস মেয়েদের সাথে বেয়াদবি করবেন না!'],
+    threatEn: ['Respect the garment workers!'],
+    aggro: ['বাঁচাও! গার্মেন্টসের ভেতর হামলা করছে!'],
+    flee: ['আল্লাহ! মেশিন ছেড়ে পালাই!'],
+    carReact: ['রাস্তায় সাবধানে গাড়ি চালান ভাই!'],
+    socialChat: ['জরিনা আপা, সুতা শেষ হয়ে গেছে, সুতা আনো!'],
+    roleSpecificLines: {
+      'GARMENT_WORKER': ['জরিনা আপা, আজকের শিপমেন্টটা সময়মতো দিতে হবে!', 'সুতাগুলো কি চেক করেছ?'],
+    },
+  },
+
+  rofiq_cutting: {
+    idle: ['✂️ কাটিং মাস্টারের হাত বড় সূক্ষ্ম হাত ভাই! এক চুল এদিক-সেদিক হবে না!', 'বিশাল বড় কাপড়ের থান কাটছি আজ!'],
+    greetBn: ['আসসালামু আলাইকুম! আমি রফিক, পদ্মা গার্মেন্টসের কাটিং মাস্টার।'],
+    greetEn: ['Hi! I am Rofiq, the Cutting Master at Padma Garments.'],
+    tradeBn: ['এই নিন, গার্মেন্টসের বিশুদ্ধ পানি ও লজেন্স (+15 HP)!'],
+    tradeEn: ['Stay hydrated with some fresh water (+15 HP)!'],
+    cityInfoBn: ['আমি গার্মেন্টসের কাটিং সেকশনে থাকি, এখানেই সব কাপড়ের নকশা করা হয়।'],
+    cityInfoEn: ['I manage the cutting section where all designs are born!'],
+    apologyBn: ['কাঁচি ধরতে গিয়ে একটু তড়বড় হয়ে গেছি, সরি ভাই!'],
+    apologyEn: ['Sorry about that, my mistake!'],
+    threatBn: ['কাটিং মাস্টারের ধারালো কাঁচি কিন্তু খুব ভয়ংকর!'],
+    threatEn: ['Don’t mess with the master cutter!'],
+    aggro: ['ধর ওকে! কাটিং সেকশনে গণ্ডগোল করছে!'],
+    flee: ['সিকিউরিটি! এদিকে আসুন দ্রুত!'],
+    carReact: ['ফুটপাতে গাড়ি উঠায় কেন মিয়া?!'],
+    socialChat: ['লিটন ভাই, কাপড়ের মাপগুলো কি ঠিক আছে?'],
+    roleSpecificLines: {
+      'GARMENT_WORKER': ['জরিনা, এই পিসগুলো সেলাই সেকশনে পাঠিয়ে দাও।'],
+    },
+  },
+
+  liton_exporter: {
+    idle: ['📦 আজকের এক্সপোর্ট শিপমেন্টটা রেডি করতে হবে। সময় খুব কম!', 'পদ্মা গার্মেন্টসের মাল এখন আমেরিকায় যাচ্ছে!'],
+    greetBn: ['হ্যালো! আমি লিটন, পদ্মা গার্মেন্টসের এক্সপোর্ট সুপারভাইজার।'],
+    greetEn: ['Hello! I am Liton, the Export Supervisor at Padma Garments.'],
+    tradeBn: ['শিপমেন্ট চেক করে ক্লান্ত? এই নিন এনার্জি ড্রিংক (+20 HP)!'],
+    tradeEn: ['Refreshing energy drink for a hardworking day (+20 HP)!'],
+    cityInfoBn: ['আমাদের ফ্যাক্টরি থেকে ট্রাক বোঝাই হয়ে মাল সরাসরি বন্দরে যায়।'],
+    cityInfoEn: ['Our factory goods go straight to the port for export!'],
+    apologyBn: ['কাজের চাপে একটু অস্থির হয়েছিলাম, ক্ষমা করবেন।'],
+    apologyEn: ['Sorry, I was a bit stressed with work.'],
+    threatBn: ['শিপিং লাইনে মাস্তানি চলবে না!'],
+    threatEn: ['Don’t disrupt the export line!'],
+    aggro: ['সিকিউরিটি! এই লোকটাকে ফ্যাক্টরি থেকে বের করো!'],
+    flee: ['পুলিশ ডাকো! এখানে মারামারি লাগছে!'],
+    carReact: ['ট্রাক আসার সময় রাস্তা ক্লিয়ার রাখেন!'],
+    socialChat: ['চেয়ারম্যান স্যার, শিপমেন্ট রেডি আছে।'],
+    roleSpecificLines: {
+      'GARMENT_CHAIRMAN': ['স্যার, নতুন অর্ডারটা কনফার্ম হয়ে গেছে।'],
+    },
+  },
+
+  judge_zaman: {
+    idle: ['⚖️ আইনের শাসন সুপ্রতিষ্ঠিত করতে হবে। কোনো অপরাধী ছাড় পাবে না!', 'আদালতের মর্যাদা রক্ষা করা সবার দায়িত্ব।'],
+    greetBn: ['সুপ্রভাত। আমি বিচারপতি জামান। আপনি কি কোনো মামলার বিষয়ে এসেছেন?'],
+    greetEn: ['Good morning. I am Judge Zaman. How can the court help you?'],
+    tradeBn: ['আদালতের পক্ষ থেকে আপনার জন্য দোয়া রইল। শান্তিতে থাকুন (+20 HP)।'],
+    tradeEn: ['May justice prevail! Stay healthy and safe (+20 HP)!'],
+    cityInfoBn: ['বাপের সিটি হাইকোর্ট ও অফিস কমপ্লেক্সে আপনাকে স্বাগতম।'],
+    cityInfoEn: ['Welcome to the High Court of Baper City.'],
+    apologyBn: ['আদালত আপনাকে ক্ষমা করার মহানুভবতা প্রদর্শন করল।'],
+    apologyEn: ['The court accepts your apology.'],
+    threatBn: ['বিচারপতিকে হুমকি?! আদালত অবমাননার দায়ে আপনাকে এখনই সাজা দেবো!'],
+    threatEn: ['Contempt of court! You will face the consequences!'],
+    aggro: ['পুলিশ! এই দুষ্কৃতকারীকে এখনই গ্রেপ্তার করো!'],
+    flee: ['আইন-শৃঙ্খলা রক্ষাকারী বাহিনী! পরিস্থিতি নিয়ন্ত্রণ করুন!'],
+    carReact: ['আদালত প্রাঙ্গণে হর্ন বাজানো দণ্ডনীয় অপরাধ!'],
+    socialChat: ['ব্যারিস্টার কায়সার, শুনানির ফাইলগুলো কি প্রস্তুত?'],
+    roleSpecificLines: {
+      'LAWYER': ['ব্যারিস্টার কায়সার, আপনার যুক্তিগুলো পেশ করুন।', 'পরবর্তী শুনানির তারিখ নির্ধারণ করা হলো।'],
+    },
+  },
+
+  nabila_exec: {
+    idle: ['💻 নতুন প্রজেক্টের বাজেটটা চেক করতে হবে। সময় খুব কম!', 'বাপের সিটির কর্পোরেট অফিসে অনেক কাজ আজ!'],
+    greetBn: ['হাই! আমি নাবিলা, এই অফিসের এক্সিকিউটিভ। কেমন আছেন?'],
+    greetEn: ['Hi! I am Nabila, an Executive at this corporate office.'],
+    tradeBn: ['অফিসের ক্যাফেটেরিয়া থেকে আপনার জন্য কফি ও বিস্কুট (+20 HP)!'],
+    tradeEn: ['Complimentary coffee and cookies for you (+20 HP)!'],
+    cityInfoBn: ['এই অফিস ব্লকে বড় বড় কোম্পানি আর ব্যাংকের শাখা আছে।'],
+    cityInfoEn: ['This office block hosts many top companies and bank branches.'],
+    apologyBn: ['ওহ সরি! আমি আসলে ফাইলের দিকে তাকিয়ে ছিলাম।'],
+    apologyEn: ['Oh sorry! I was preoccupied with these files.'],
+    threatBn: ['অফিসের ভেতরে ডিস্টার্ব করবেন না প্লিজ! সিকিউরিটি ডাকবো কিন্তু!'],
+    threatEn: ['Don’t cause trouble in the office!'],
+    aggro: ['সিকিউরিটি! অফিসে একজন আক্রমণাত্মক লোক ঢুকেছে!'],
+    flee: ['ও মাই গড! তাড়াতাড়ি নিরাপদ জায়গায় যাই!'],
+    carReact: ['পার্কিংয়ে দেখে গাড়ি পার্ক করুন!'],
+    socialChat: ['কামরুল ভাই, ফাইলগুলো একটু গুছিয়ে দিন তো।'],
+    roleSpecificLines: {
+      'OFFICE_CLERK': ['কামরুল ভাই, মিটিংয়ের রিপোর্টগুলো কি রেডি?', 'ফাইলগুলো সাইন করাতে হবে।'],
+    },
+  },
+
+  kamrul_clerk: {
+    idle: ['📝 এই ফাইলগুলো জজ সাহেবের কাছে নিতে হবে। অনেক সই বাকি!', 'আদালতের কাজ মানেই কাগজের স্তূপ!'],
+    greetBn: ['সালাম ভাই! আমি কামরুল, কোর্টের পেশকার। কোনো দরখাস্ত জমা দেবেন?'],
+    greetEn: ['Hello! I am Kamrul, the Court Clerk. Any applications for today?'],
+    tradeBn: ['কোর্টের ক্যান্টিন থেকে এক কাপ লাল চা খেয়ে যান ভাই (+15 HP)!'],
+    tradeEn: ['Have some tea and court canteen (+15 HP)!'],
+    cityInfoBn: ['আদালতের ভেতর ডানে জজ সাহেবের রুম আর বামে ডায়েরি সেকশন।'],
+    cityInfoEn: ['Inside the court, the Judge’s chamber is to the right!'],
+    apologyBn: ['ঠিক আছে ভাই, ভুল হতে পারে মানুষেরই।'],
+    apologyEn: ['It’s alright, everyone makes mistakes.'],
+    threatBn: ['কোর্ট ক্লার্ককে ধমকাচ্ছেন?! পুলিশের হাতে দিয়ে দেবো কিন্তু!'],
+    threatEn: ['Don’t threaten a court officer!'],
+    aggro: ['পুলিশ ভাই! ধরেন একে!'],
+    flee: ['লোহার গেট লাগিয়ে দাও! সন্ত্রাসী ঢুকেছে!'],
+    carReact: ['আস্তে চালান মিয়া! কোর্টের গেট এটা!'],
+    socialChat: ['নাবিলা ম্যাডাম, ফাইলগুলো টেবিলে রেখেছি।'],
+    roleSpecificLines: {
+      'JUDGE': ['জজ সাহেব, এই ফাইলগুলো আপনার সইয়ের জন্য আনা হয়েছে।'],
+    },
+  },
+
+  rashed_bus_pax: {
+    idle: ['🚌 বাসে সিট পাওয়া যে কী কঠিন! আজ কি দাঁড়িয়ে যেতে হবে?!', 'গুলশান যাওয়ার বাসটা কি ছেড়ে গেল?'],
+    greetBn: ['আসসালামু আলাইকুম! আমি রাশেদ, বাসের জন্য অপেক্ষা করছি।'],
+    greetEn: ['Hi! I’m Rashed, waiting for the Gulshan bus.'],
+    tradeBn: ['আপনি কি ওইদিকে যাচ্ছেন? এই নিন লজেন্স (+10 HP)!'],
+    tradeEn: ['Heading that way? Have a candy (+10 HP)!'],
+    cityInfoBn: ['এই স্টপেজে গুলশান আর যাত্রাবাড়ীর লোকাল বাসগুলো থামে।'],
+    cityInfoEn: ['Local buses to Gulshan and Jatrabari stop right here.'],
+    apologyBn: ['সরি ভাই, বাসের ভিড়ে একটু ধাক্কা লেগে গেছে।'],
+    apologyEn: ['Sorry brother, it’s crowded here!'],
+    threatBn: ['বাস যাত্রীদের ওপর গরম দেখাবেন না!'],
+    threatEn: ['Don’t harass regular commuters!'],
+    aggro: ['বাঁচাও! এই লোকটা বাসে উঠতে গিয়ে ধাক্কা মারছে!'],
+    flee: ['আল্লাহ গো! বাসে উঠে জান বাঁচাই!'],
+    carReact: ['গাড়ির ভেতর কি চাকা আছে নাকি পাখা?! দেখে চালান!'],
+    socialChat: ['ফারহানা আপু, বাস কি আজ লেট করবে?'],
+    roleSpecificLines: {
+      'BUS_CONDUCTOR': ['কাদের ভাই, বাসে কি সিট খালি আছে?', 'একটু জায়গা করে দেন ভাই।'],
+    },
+  },
+
+  farhana_bus_pax: {
+    idle: ['🕒 অফিস যেতে দেরি হয়ে গেল! বাসের কি দেখা নেই?!', 'কম ভাড়ায় যাওয়ার জন্য লোকাল বাসের অপেক্ষায় আছি।'],
+    greetBn: ['হ্যালো! আমি ফারহানা। বাসের জন্য দাঁড়িয়ে আছি।'],
+    greetEn: ['Hello! I’m Farhana, waiting for the bus.'],
+    tradeBn: ['আপনার কাছে কি পানির বোতল হবে? এই নিন বিস্কুট (+15 HP)!'],
+    tradeEn: ['Have some snacks while we wait (+15 HP)!'],
+    cityInfoBn: ['এই বাস স্টপটা শপিং মলের একদম কাছেই।'],
+    cityInfoEn: ['This bus stop is very close to the Shopping Mall.'],
+    apologyBn: ['সরি, আমি খেয়াল করিনি!'],
+    apologyEn: ['Sorry, I didn’t notice!'],
+    threatBn: ['রাস্তায় মেয়েদের সাথে এমন করবেন না!'],
+    threatEn: ['Don’t bother me!'],
+    aggro: ['সবাই দেখুন! এই লোকটা অভদ্রতা করছে!'],
+    flee: ['বাঁচাও! এখান থেকে সরে যেতে হবে!'],
+    carReact: ['ফুটপাতে কেন ভাই?! রাস্তায় চালান!'],
+    socialChat: ['রাশেদ ভাই, বাস মনে হয় ওই যে আসছে!'],
+    roleSpecificLines: {
+      'BUS_CONDUCTOR': ['কাদের ভাই, মতিঝিল যাবে এই বাস?', 'ভাড়া কত ভাই?'],
+    },
+  },
+
+  mitu_train_pax: {
+    idle: ['🚆 কমলাপুর স্টেশনে মেট্রো ট্রেনের জন্য ওয়েট করছি। ট্রেন জার্নি আমার প্রিয়!', 'ট্রেনটা কি সময়মতো আসবে আজ?'],
+    greetBn: ['হাই! আমি মিতু। ট্রেনের সহযাত্রী হবেন নাকি?'],
+    greetEn: ['Hi! I’m Mitu. Waiting for the Metro train!'],
+    tradeBn: ['ট্রেনের ভেতর চিপস খেতে খুব ভালো লাগে, এই নিন (+15 HP)!'],
+    tradeEn: ['Love eating chips on the train, have some (+15 HP)!'],
+    cityInfoBn: ['কমলাপুর স্টেশন থেকে শহরের চারপাশটা ঘুরে দেখা যায়।'],
+    cityInfoEn: ['The Metro train circles the whole city from Kamalapur!'],
+    apologyBn: ['ওহ সরি! ট্রেনের প্ল্যাটফর্মে একটু ভিড় তো!'],
+    apologyEn: ['Sorry! The platform is quite busy!'],
+    threatBn: ['ট্রেন স্টেশনে পুলিশ আছে কিন্তু! সাবধান!'],
+    threatEn: ['There are police at the station, watch out!'],
+    aggro: ['পুলিশ ভাই! ট্রেনের ভেতর হামলা হচ্ছে!'],
+    flee: ['জলদি ট্রেনের কামরায় ঢুকে যাই!'],
+    carReact: ['স্টেশনের সামনে এমন জোরে গাড়ি চালায় কে?!'],
+    socialChat: ['আশিক ভাই, ট্রেনের টিকেট কি কেটেছেন?'],
+    roleSpecificLines: {
+      'COMMUTER': ['আশিক ভাই, ট্রেনের জানালা দিয়ে হাওয়া খেতে দারুণ লাগে!'],
+    },
+  },
+
+  ashik_train_pax: {
+    idle: ['🚆 জ্যাম এড়িয়ে চলতে ট্রেনের কোনো বিকল্প নেই! কমলাপুর টু মতিঝিল!', 'ট্রেনের সিটে বসে বিকেলের হাওয়া খাবো।'],
+    greetBn: ['হ্যালো ভাই! আমি আশিক। মেট্রো ট্রেনের অপেক্ষায় আছি।'],
+    greetEn: ['Hello! I’m Ashik, waiting for the Metro train.'],
+    tradeBn: ['ট্রেন আসার আগে ঝালমুড়ি খেয়ে নিন ভাই (+15 HP)!'],
+    tradeEn: ['Have some spicy puffed rice while waiting (+15 HP)!'],
+    cityInfoBn: ['মেট্রো ট্রেনটা বাপের সিটির চারপাশ ঘুরে আবার এই স্টেশনেই ফেরে।'],
+    cityInfoEn: ['The Metro train loops around Baper City and returns here!'],
+    apologyBn: ['দুঃখিত ভাই, খেয়াল করিনি!'],
+    apologyEn: ['Sorry brother, my bad!'],
+    threatBn: ['বেয়াদবি করবি না! ট্রেনের মানুষ তোরে ধাওয়া করবে!'],
+    threatEn: ['Don’t be rude! The crowd will chase you!'],
+    aggro: ['ধর ওকে! ট্রেনের স্টেশনে মাস্তানি করছে!'],
+    flee: ['পালাও! এখানে বড় ঝগড়া লাগছে!'],
+    carReact: ['ব্রেক মারেন ভাই! স্টেশনের সামনে এত স্পিড কেন?!'],
+    socialChat: ['মিতু, টিকেট আমার কাছেই আছে।'],
+    roleSpecificLines: {
+      'COMMUTER': ['মিতু, এই ট্রেনটা মনে হয় সরাসরি যাবে।'],
+    },
+  },
+
+  dr_maya: {
+    idle: [
+      'ঢাকা মেডিকেল হাসপাতালের এই ওয়ার্ডে রোগীদের নিবিড় পর্যবেক্ষণে রাখা হয়েছে।',
+      'রোগীদের প্রেসার ও হার্ট রেট নিয়মিত চেক করা জরুরি।',
+      'চিকিৎসা সেবায় কোনো অবহেলা চলবে না—সেবা ও যত্নই বাপের সিটির সম্পদ!',
+    ],
+    greetBn: [
+      'নমস্কার! আমি ডা. মায়া। হাসপাতালের এই বেড কোঠায় আমরা রোগীদের চিকিৎসা দেই। আপনার কি কোনো শারীরিক সমস্যা আছে (+৩৫ HP)?',
+    ],
+    greetEn: [
+      'Good day! I am Dr. Maya, senior consultant here at Dhaka Medical. How can I help you (+35 HP)?',
+    ],
+    tradeBn: [
+      'আপনার জন্য জরুরি ওষুধ ও পরামর্শ দিয়ে দিলাম! সুস্থ থাকুন (+৩৫ HP)!',
+    ],
+    tradeEn: [
+      'I’ve prescribed the necessary medication and aid for you! Get well soon (+35 HP)!',
+    ],
+    cityInfoBn: [
+      'এই হাসপাতালের ভেতরে রোগীদের জন্য ৬টি বেড, ফার্মেসি আর অপারেশন থিয়েটার আছে।',
+    ],
+    cityInfoEn: [
+      'Our hospital interior features 6 patient beds, a dedicated pharmacy, and a recovery ward!',
+    ],
+    apologyBn: ['হাসপাতালে শান্ত থাকুন, রোগীরা যেন বিরক্ত না হয়।'],
+    apologyEn: ['Please maintain silence in the hospital ward.'],
+    threatBn: ['একজন চিকিৎসকের ওপর হুমকি?! পুলিশ ও আনসার এখনই আপনাকে হাজতে পাঠাবে!'],
+    threatEn: ['Threatening a doctor?! You will be arrested immediately!'],
+    aggro: ['আনসার! সিকিউরিটি! এই দুষ্কৃতকারীকে হাসপাতাল থেকে বের করো!'],
+    flee: ['জলদি ব্যাকআপ পাঠান! হাসপাতালের ওয়ার্ডে হামলা হয়েছে!'],
+    carReact: ['হাসপাতালের সামনে সাইলেন্স জোন! হর্ন বাজাবেন না!'],
+    socialChat: ['রুপা, রোগীদের ওষুধ দেওয়ার সময়টা কি হয়েছে?'],
+    roleSpecificLines: {
+      'NURSE': ['রুপা, ২ নম্বর বেডের পেশেন্টের অবস্থা এখন কেমন?', 'জরুরি বিভাগের রিপোর্টগুলো নিয়ে এসো।'],
+      'PATIENT': ['ভয় পাবেন না, আপনি খুব দ্রুত সুস্থ হয়ে উঠবেন ইনশাআল্লাহ।', 'ঠিকমতো ওষুধগুলো খেয়ে নিন।'],
+    },
   },
 };
 
@@ -5390,7 +5756,20 @@ export function generateLocalConversationReply(
   const msg = rawMessage.trim().toLowerCase();
   // Female characters with speaksEnglishOnly ALWAYS reply in English even if player types in Bengali!
   const useBengali = npc.speaksEnglishOnly ? false : /[\u0980-\u09FF]/.test(rawMessage);
-  const bank = NPC_DIALOGUE_BANKS[npc.id] || NPC_DIALOGUE_BANKS.viper;
+  const bank = NPC_DIALOGUE_BANKS[npc.id];
+  if (!bank) {
+    return {
+      speech: '',
+      mood: 'Calm',
+      behavior: npc.behavior,
+      healedHp: 0,
+      popularityDelta: 0,
+      triggerMob: false,
+      grantRidePermission: false,
+      analysisNote: 'No dialogue bank found',
+    };
+  }
+
 
   npc.timesChattedWithPlayer += 1;
 

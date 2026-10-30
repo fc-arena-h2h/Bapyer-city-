@@ -67,6 +67,7 @@ const createInitialWorld = (): WorldSimulationRef => ({
     score: 0,
     popularity: 65,
     money: 2500,
+    isRunning: false,
   },
   vehicles: createInitialVehicles(),
   npcs: createInitialCommunityNPCs(),
@@ -104,6 +105,8 @@ const createInitialWorld = (): WorldSimulationRef => ({
     x: 2185,
     y: 825,
     shake: 0,
+    angleLevel: 1,
+    zoom: 1.0,
   },
   hitstopTimer: 0,
   mobAlertTimer: 0,
@@ -161,6 +164,8 @@ export default function App() {
   // Default chat drawer closed on compact mobile screens so bottom controls never get crowded
   const [chatDrawerOpen, setChatDrawerOpen] = useState<boolean>(false);
   const [missionDrawerOpen, setMissionDrawerOpen] = useState<boolean>(false);
+  const [isRunningMode, setIsRunningMode] = useState<boolean>(false);
+  const [cameraAngleLevel, setCameraAngleLevel] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [currentInteriorZone, setCurrentInteriorZone] = useState<
     | 'PLAYER_HOME'
     | 'GARMENTS'
@@ -261,6 +266,50 @@ export default function App() {
     },
     []
   );
+
+  // Toggle between Normal Walk Mode (নরমাল হাঁটা) and Fast Run Mode (দ্রুত দৌড়)
+  const handleToggleRunMode = useCallback(() => {
+    setIsRunningMode((prev) => {
+      const next = !prev;
+      worldRef.current.player.isRunning = next;
+      setCommunityBannerText(
+        next
+          ? '🏃 রান মোড চালু হয়েছে! এখন জয়স্টিক দিয়ে দ্রুত দৌড়াতে পারবেন।'
+          : '🚶 নরমাল হাঁটা মোড চালু হয়েছে! এখন জয়স্টিক দিয়ে স্বাভাবিকভাবে হাঁটতে পারবেন।'
+      );
+      return next;
+    });
+  }, []);
+
+  // Set or Cycle 5 Camera Angles (১ থেকে ৫ পর্যন্ত উপর থেকে ম্যাপ দেখার ভিউ মোড)
+  const handleSetCameraAngle = useCallback((level: 1 | 2 | 3 | 4 | 5) => {
+    setCameraAngleLevel(level);
+    worldRef.current.camera.angleLevel = level;
+    const labels: Record<1 | 2 | 3 | 4 | 5, string> = {
+      1: '🎥 ক্যামেরা অ্যাঙ্গেল ১/৫: জেনারেল ভিউ (সাধারণ ক্লোজ ভিউ)',
+      2: '🎥 ক্যামেরা অ্যাঙ্গেল ২/৫: মিডিয়াম ভিউ (একটু উপর থেকে ম্যাপ দেখা যাচ্ছে)',
+      3: '🎥 ক্যামেরা অ্যাঙ্গেল ৩/৫: ড্রোন ভিউ (মাঝারি উচ্চতা থেকে শহর দেখা যাচ্ছে)',
+      4: '🎥 ক্যামেরা অ্যাঙ্গেল ৪/৫: হাই ভিউ (অনেক উপর থেকে বড় এলাকা দেখা যাচ্ছে)',
+      5: '🎥 ক্যামেরা অ্যাঙ্গেল ৫/৫: ফুল ম্যাপ ভিউ (সবচেয়ে উপর থেকে চারপাশ দেখা যাচ্ছে)',
+    };
+    setCommunityBannerText(labels[level]);
+  }, []);
+
+  const handleCycleCameraAngle = useCallback(() => {
+    setCameraAngleLevel((prev) => {
+      const next = ((prev % 5) + 1) as 1 | 2 | 3 | 4 | 5;
+      worldRef.current.camera.angleLevel = next;
+      const labels: Record<1 | 2 | 3 | 4 | 5, string> = {
+        1: '🎥 ক্যামেরা অ্যাঙ্গেল ১/৫: জেনারেল ভিউ (সাধারণ ক্লোজ ভিউ)',
+        2: '🎥 ক্যামেরা অ্যাঙ্গেল ২/৫: মিডিয়াম ভিউ (একটু উপর থেকে ম্যাপ দেখা যাচ্ছে)',
+        3: '🎥 ক্যামেরা অ্যাঙ্গেল ৩/৫: ড্রোন ভিউ (মাঝারি উচ্চতা থেকে শহর দেখা যাচ্ছে)',
+        4: '🎥 ক্যামেরা অ্যাঙ্গেল ৪/৫: হাই ভিউ (অনেক উপর থেকে বড় এলাকা দেখা যাচ্ছে)',
+        5: '🎥 ক্যামেরা অ্যাঙ্গেল ৫/৫: ফুল ম্যাপ ভিউ (সবচেয়ে উপর থেকে চারপাশ দেখা যাচ্ছে)',
+      };
+      setCommunityBannerText(labels[next]);
+      return next;
+    });
+  }, []);
 
   const syncHudFromWorld = useCallback(() => {
     const w = worldRef.current;
@@ -423,7 +472,9 @@ export default function App() {
         if (npc.hp <= 0 || npc.drivingVehicleId || npc.ridingVehicleId) continue;
         const d = Math.hypot(npc.x - p.x, npc.y - p.y);
         if (d <= MAX_VOICE_HEARING_DIST && npc.speechTimer <= 0) {
-          const bank = NPC_DIALOGUE_BANKS[npc.id] || NPC_DIALOGUE_BANKS.viper;
+          const bank = NPC_DIALOGUE_BANKS[npc.id];
+          if (!bank) continue;
+
           npc.speech = pickRandomLine(bank.carReact);
           npc.speechTimer = 4.2;
           sound.speakCharacterLine?.({
@@ -536,7 +587,9 @@ export default function App() {
           });
         }
 
-        const bank = NPC_DIALOGUE_BANKS[npc.id] || NPC_DIALOGUE_BANKS.viper;
+        const bank = NPC_DIALOGUE_BANKS[npc.id];
+        if (!bank) continue;
+
         const communityReaction = triggerCommunityCrimeReaction(npc, p, w.npcs, w.vehicles);
         setCommunityBannerText(communityReaction.announcement);
 
@@ -1383,12 +1436,12 @@ export default function App() {
       completeMission('help_beggar');
     }
     if (
-      (target.id === 'tania_mall' || target.id === 'sobhan_bazar' || target.role === 'VENDOR') &&
+      (target.id === 'tania_mall' || target.id === 'sobhan_bazar' || target.role === 'VAN_VENDOR') &&
       response.healedHp > 0
     ) {
       completeMission('shop_bazar_mall');
     }
-    if ((target.role === 'DOCTOR' || target.role === 'NURSE') && response.healedHp > 0) {
+    if ((target.role === 'MEDIC' || target.role === 'NURSE') && response.healedHp > 0) {
       completeMission('visit_hospital');
     }
 
@@ -1430,6 +1483,8 @@ export default function App() {
 
   const handleStartOrResetGame = () => {
     worldRef.current = createInitialWorld();
+    worldRef.current.player.isRunning = isRunningMode;
+    worldRef.current.camera.angleLevel = cameraAngleLevel;
     clearDrivingKeys();
     resetJoystickState();
     setPlayerHp(100);
@@ -1625,8 +1680,39 @@ export default function App() {
             </button>
           )}
 
-          {/* Top-Right: Compact Control Icons */}
-          <div className="flex items-center gap-1 pointer-events-auto">
+          {/* Top-Right: 5-Level Camera View Mode + Compact Control Icons */}
+          <div className="flex items-center gap-1 pointer-events-auto flex-wrap justify-end">
+            {/* 5-Level Camera Angle Selector (১ থেকে ৫ পর্যন্ত ক্যামেরা ভিউ মোড) */}
+            <div className="flex items-center bg-[#0B0616]/92 backdrop-blur-md border border-emerald-500/50 rounded-xl p-0.5 shadow-[0_0_14px_rgba(16,185,129,0.2)]">
+              <button
+                type="button"
+                onClick={handleCycleCameraAngle}
+                className="px-1.5 py-1 rounded-lg text-[9.5px] sm:text-[10px] font-display font-black text-emerald-300 hover:text-white flex items-center gap-1 cursor-pointer"
+                title="ক্যামেরা অ্যাঙ্গেল পরিবর্তন করুন (১ থেকে ৫)"
+              >
+                <span>🎥 ভিউ</span>
+              </button>
+              {([1, 2, 3, 4, 5] as const).map((lvl) => {
+                const bnDigits = ['১', '২', '৩', '৪', '৫'];
+                const active = cameraAngleLevel === lvl;
+                return (
+                  <button
+                    key={lvl}
+                    type="button"
+                    onClick={() => handleSetCameraAngle(lvl)}
+                    className={`w-5 h-5 sm:w-5.5 sm:h-5.5 rounded-lg font-mono text-[9.5px] sm:text-[10px] font-extrabold transition-all cursor-pointer flex items-center justify-center ${
+                      active
+                        ? 'bg-gradient-to-br from-emerald-400 to-cyan-400 text-slate-950 shadow-[0_0_10px_rgba(16,185,129,0.8)] scale-105'
+                        : 'text-slate-300 hover:bg-slate-800/80'
+                    }`}
+                    title={`ক্যামেরা অ্যাঙ্গেল ${bnDigits[lvl - 1]}`}
+                  >
+                    {bnDigits[lvl - 1]}
+                  </button>
+                );
+              })}
+            </div>
+
             {/* Chat Bar Show/Hide Toggle */}
             <button
               type="button"
@@ -1660,7 +1746,7 @@ export default function App() {
               </button>
             )}
 
-            {/* Voice Mute/Unmute */}
+            {/* Voice Mute/Unmute & Status */}
             <button
               type="button"
               onClick={toggleSound}
@@ -1672,6 +1758,19 @@ export default function App() {
               ) : (
                 <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
               )}
+            </button>
+
+            {/* Sound Unlock Button (Helpful for Mobile APKs) */}
+            <button
+              type="button"
+              onClick={() => {
+                sound.speakCharacterLine?.('বাপের সিটি সাউন্ড চেক সম্পন্ন!');
+                setCommunityBannerText('🔊 সাউন্ড সিস্টেম সচল হয়েছে!');
+              }}
+              className="p-1.5 rounded-xl bg-[#0B0616]/90 backdrop-blur-md border border-emerald-500/40 text-emerald-400 hover:text-white transition-colors cursor-pointer"
+              title="সাউন্ড চেক করুন"
+            >
+              <Radio className="w-3.5 h-3.5" />
             </button>
 
             {/* Restart World */}
@@ -1753,7 +1852,7 @@ export default function App() {
                         ? 'শপিং মল থেকে নতুন জামা কিনবো!'
                         : targetNpc.id === 'sobhan_bazar'
                           ? 'এক কেজি মাছ ও তাজা সবজি বাজার দিন!'
-                          : targetNpc.role === 'DOCTOR' || targetNpc.role === 'NURSE'
+                          : targetNpc.role === 'MEDIC' || targetNpc.role === 'NURSE'
                             ? 'ডাক্তার আপা, আমার চিকিৎসা ও ওষুধ দিন!'
                             : targetNpc.id === 'kader_bus'
                               ? 'কাদের ভাই, বাসে উঠবো!'
@@ -1825,23 +1924,16 @@ export default function App() {
         {gameState === 'PLAYING' && (
           <>
             {isPlayerDriving ? (
-              /* DEDICATED VEHICLE STEERING BUTTONS (বামে ◀ এবং ডানে ▶ বাটন) */
               <div
                 onContextMenu={(e) => e.preventDefault()}
                 className="absolute bottom-2.5 left-2.5 sm:bottom-5 sm:left-6 z-20 flex items-center gap-2 pointer-events-auto select-none"
               >
                 <button
                   type="button"
-                  onContextMenu={(e) => e.preventDefault()}
-                  onDragStart={(e) => e.preventDefault()}
                   onPointerDown={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    try {
-                      e.currentTarget.setPointerCapture(e.pointerId);
-                    } catch {
-                      // ignore
-                    }
+                    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
                     setDrivingDirection('left', true);
                   }}
                   onPointerUp={(e) => {
@@ -1851,30 +1943,22 @@ export default function App() {
                   }}
                   onPointerCancel={() => setDrivingDirection('left', false)}
                   onLostPointerCapture={() => setDrivingDirection('left', false)}
-                  className={`w-13 h-13 sm:w-18 sm:h-16 rounded-2xl border-2 flex flex-col items-center justify-center touch-none select-none cursor-pointer transition-transform ${
+                  className={`w-11 h-11 sm:w-18 sm:h-16 rounded-xl border-2 flex flex-col items-center justify-center touch-none select-none cursor-pointer transition-transform ${
                     driveBtnState.left
                       ? 'bg-cyan-400 text-slate-950 border-white scale-95 shadow-[0_0_22px_rgba(0,240,255,0.9)]'
                       : 'bg-[#0B0616]/90 text-cyan-300 border-cyan-400/75 shadow-[0_0_14px_rgba(0,240,255,0.22)]'
                   }`}
                 >
-                  <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.5] pointer-events-none select-none" />
-                  <span className="font-display text-[10px] sm:text-[11px] font-extrabold pointer-events-none select-none">
-                    বামে
-                  </span>
+                  <ArrowLeft className="w-4 h-4 sm:w-6 sm:h-6 stroke-[2.5]" />
+                  <span className="font-display text-[8.5px] sm:text-[11px] font-extrabold">বামে</span>
                 </button>
 
                 <button
                   type="button"
-                  onContextMenu={(e) => e.preventDefault()}
-                  onDragStart={(e) => e.preventDefault()}
                   onPointerDown={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    try {
-                      e.currentTarget.setPointerCapture(e.pointerId);
-                    } catch {
-                      // ignore
-                    }
+                    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
                     setDrivingDirection('right', true);
                   }}
                   onPointerUp={(e) => {
@@ -1884,46 +1968,71 @@ export default function App() {
                   }}
                   onPointerCancel={() => setDrivingDirection('right', false)}
                   onLostPointerCapture={() => setDrivingDirection('right', false)}
-                  className={`w-13 h-13 sm:w-18 sm:h-16 rounded-2xl border-2 flex flex-col items-center justify-center touch-none select-none cursor-pointer transition-transform ${
+                  className={`w-11 h-11 sm:w-18 sm:h-16 rounded-xl border-2 flex flex-col items-center justify-center touch-none select-none cursor-pointer transition-transform ${
                     driveBtnState.right
                       ? 'bg-cyan-400 text-slate-950 border-white scale-95 shadow-[0_0_22px_rgba(0,240,255,0.9)]'
                       : 'bg-[#0B0616]/90 text-cyan-300 border-cyan-400/75 shadow-[0_0_14px_rgba(0,240,255,0.22)]'
                   }`}
                 >
-                  <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.5] pointer-events-none select-none" />
-                  <span className="font-display text-[10px] sm:text-[11px] font-extrabold pointer-events-none select-none">
-                    ডানে
-                  </span>
+                  <ArrowRight className="w-4 h-4 sm:w-6 sm:h-6 stroke-[2.5]" />
+                  <span className="font-display text-[8.5px] sm:text-[11px] font-extrabold">ডানে</span>
                 </button>
               </div>
             ) : (
-              /* ON-FOOT THUMB JOYSTICK (শুধুমাত্র পায়ে হাঁটার সময়) */
-              <div
-                ref={joystickZoneRef}
-                onContextMenu={(e) => e.preventDefault()}
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  activeJoystickPointerId.current = e.pointerId;
-                  updateJoystickFromPointer(e.clientX, e.clientY);
-                }}
-                className="absolute bottom-2.5 left-2.5 sm:bottom-5 sm:left-6 z-20 w-22 h-22 sm:w-28 sm:h-28 rounded-full bg-[#0B0616]/80 backdrop-blur-md border-2 border-cyan-500/50 shadow-[0_0_22px_rgba(0,240,255,0.2)] flex items-center justify-center touch-none select-none cursor-pointer"
-              >
-                <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border border-cyan-400/25 pointer-events-none select-none" />
+              <div className="absolute bottom-2.5 left-2.5 sm:bottom-5 sm:left-6 z-20 flex items-end gap-1.5 pointer-events-auto select-none">
                 <div
-                  ref={joystickKnobRef}
-                  className="absolute w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-gradient-to-br from-emerald-400 via-cyan-400 to-blue-500 shadow-[0_0_14px_rgba(0,240,255,0.85)] border-2 border-white/90 pointer-events-none select-none will-change-transform"
-                />
+                  ref={joystickZoneRef}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    activeJoystickPointerId.current = e.pointerId;
+                    updateJoystickFromPointer(e.clientX, e.clientY);
+                  }}
+                  className={`w-18 h-18 sm:w-28 sm:h-28 rounded-full bg-[#0B0616]/80 backdrop-blur-md border-2 flex items-center justify-center touch-none select-none cursor-pointer transition-colors ${
+                    isRunningMode
+                      ? 'border-amber-400/85 shadow-[0_0_24px_rgba(245,158,11,0.35)]'
+                      : 'border-cyan-500/50 shadow-[0_0_22px_rgba(0,240,255,0.2)]'
+                  }`}
+                >
+                  <div className="w-9 h-9 sm:w-16 sm:h-16 rounded-full border border-cyan-400/25" />
+                  <div
+                    ref={joystickKnobRef}
+                    className={`absolute w-7 h-7 sm:w-11 sm:h-11 rounded-full border-2 border-white/90 will-change-transform ${
+                      isRunningMode
+                        ? 'bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500 shadow-[0_0_16px_rgba(245,158,11,0.9)]'
+                        : 'bg-gradient-to-br from-emerald-400 via-cyan-400 to-blue-500 shadow-[0_0_14px_rgba(0,240,255,0.85)]'
+                    }`}
+                  />
+                </div>
+
+                {!inTrain && (
+                  <button
+                    type="button"
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleToggleRunMode();
+                    }}
+                    className={`px-2 py-1.5 sm:px-3.5 sm:py-2.5 rounded-xl border-2 font-display font-extrabold text-[9px] sm:text-xs flex flex-col items-center justify-center gap-0.5 touch-none select-none cursor-pointer transition-all active:scale-95 ${
+                      isRunningMode
+                        ? 'bg-gradient-to-b from-amber-400 to-orange-500 text-slate-950 border-white shadow-[0_0_22px_rgba(245,158,11,0.85)]'
+                        : 'bg-[#0B0616]/90 text-cyan-300 border-cyan-400/65 shadow-[0_0_14px_rgba(0,240,255,0.2)]'
+                    }`}
+                    title="হাঁটা / দৌড়ানো মোড পরিবর্তন করুন"
+                  >
+                    <span className="text-xs sm:text-base leading-none">{isRunningMode ? '🏃' : '🚶'}</span>
+                    <span className="uppercase tracking-tighter">{isRunningMode ? 'রান চালু' : 'রান'}</span>
+                  </button>
+                )}
               </div>
             )}
 
-            {/* Bottom-Right Action & Driving Pedal Buttons (Compact & Non-Overlapping) */}
+            {/* Bottom-Right Action & Driving Pedal Buttons */}
             <div
               onContextMenu={(e) => e.preventDefault()}
-              className="absolute bottom-2.5 right-2.5 sm:bottom-5 sm:right-6 z-20 flex items-end gap-1.5 sm:gap-2.5 pointer-events-auto select-none"
+              className="absolute bottom-2.5 right-2.5 sm:bottom-5 sm:right-6 z-20 flex items-end gap-1 sm:gap-2.5 pointer-events-auto select-none"
             >
-              {/* Column 1: Context Actions (Shopping, Train, Passenger, Enter/Exit Vehicle, Michil) */}
-              <div className="flex flex-col items-end gap-1 select-none">
+              <div className="flex flex-col items-end gap-0.5 sm:gap-1">
                 {!inVehicle &&
                   (currentInteriorZone === 'PLAYER_HOME' ||
                     currentInteriorZone === 'GARMENTS' ||
@@ -1950,47 +2059,39 @@ export default function App() {
                     targetNpc?.role === 'NURSE') && (
                     <button
                       type="button"
-                      onContextMenu={(e) => e.preventDefault()}
                       onPointerDown={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         handleContextZoneOrNpcAction();
                       }}
-                      className="flex items-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl font-display font-bold text-[10px] sm:text-xs bg-gradient-to-r from-amber-400 via-pink-500 to-rose-500 text-white shadow-[0_0_18px_rgba(244,63,94,0.6)] border border-white/90 active:scale-95 transition-transform cursor-pointer touch-none select-none"
+                      className="flex items-center gap-1 px-2 py-1 sm:px-3 sm:py-2 rounded-xl font-display font-bold text-[9px] sm:text-xs bg-gradient-to-r from-amber-400 via-pink-500 to-rose-500 text-white shadow-[0_0_18px_rgba(244,63,94,0.6)] border border-white/90 active:scale-95 transition-transform cursor-pointer touch-none select-none"
                     >
-                      <Store className="w-3.5 h-3.5 shrink-0 pointer-events-none select-none" />
-                      <span className="pointer-events-none select-none">
+                      <Store className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                      <span>
                         {currentInteriorZone === 'PLAYER_HOME'
-                          ? '🏠 নিজের ঘরে বিশ্রাম ও সিন্দুক'
-                          : currentInteriorZone === 'GARMENTS' ||
-                              targetNpc?.role === 'GARMENT_WORKER'
-                            ? '🧵 গার্মেন্টস তদারকি'
+                          ? '🏠 নিজের ঘর'
+                          : currentInteriorZone === 'GARMENTS' || targetNpc?.role === 'GARMENT_WORKER'
+                            ? '🧵 গার্মেন্টস'
                             : currentInteriorZone === 'OFFICE_COURT' ||
                                 targetNpc?.role === 'LAWYER' ||
                                 targetNpc?.role === 'JUDGE' ||
                                 targetNpc?.role === 'OFFICE_EXECUTIVE'
-                              ? '⚖️ অফিস/আদালত কাজ'
+                              ? '⚖️ অফিস'
                               : targetNpc?.role === 'BEGGAR'
-                                ? '🤲 ভিক্ষা দিন'
-                                : currentInteriorZone === 'NIGHTCLUB' ||
-                                    targetNpc?.role === 'CLUB_DANCER'
-                                  ? '💃 নাচ ও গান'
-                                  : currentInteriorZone === 'FOOTBALL_STADIUM' ||
-                                      targetNpc?.role === 'FOOTBALLER'
-                                    ? '⚽ ফুটবল শট'
-                                    : currentInteriorZone === 'HOTEL' ||
-                                        targetNpc?.role === 'HOTEL_CHEF'
-                                      ? '🍛 কাচ্চি খান'
-                                      : currentInteriorZone === 'MUDI_DOKAN' ||
-                                          targetNpc?.role === 'MUDI_SHOPKEEPER'
-                                        ? '🏪 মুদি সদাই'
-                                        : currentInteriorZone === 'SHOPPING_MALL' ||
-                                            targetNpc?.id === 'tania_mall'
-                                          ? '🛍️ শপিং করুন'
-                                          : currentInteriorZone === 'KACHA_BAZAR' ||
-                                              targetNpc?.id === 'sobhan_bazar'
-                                            ? '🛒 বাজার করুন'
-                                            : '🏥 চিকিৎসা নিন'}
+                                ? '🤲 ভিক্ষা'
+                                : currentInteriorZone === 'NIGHTCLUB' || targetNpc?.role === 'CLUB_DANCER'
+                                  ? '💃 নাচ'
+                                  : currentInteriorZone === 'FOOTBALL_STADIUM' || targetNpc?.role === 'FOOTBALLER'
+                                    ? '⚽ ফুটবল'
+                                    : currentInteriorZone === 'HOTEL' || targetNpc?.role === 'HOTEL_CHEF'
+                                      ? '🍛 কাচ্চি'
+                                      : currentInteriorZone === 'MUDI_DOKAN' || targetNpc?.role === 'MUDI_SHOPKEEPER'
+                                        ? '🏪 মুদি'
+                                        : currentInteriorZone === 'SHOPPING_MALL' || targetNpc?.id === 'tania_mall'
+                                          ? '🛍️ শপিং'
+                                          : currentInteriorZone === 'KACHA_BAZAR' || targetNpc?.id === 'sobhan_bazar'
+                                            ? '🛒 বাজার'
+                                            : '🏥 চিকিৎসা'}
                       </span>
                     </button>
                   )}
@@ -1998,42 +2099,37 @@ export default function App() {
                 {(canBoardTrain || inTrain) && !inVehicle && (
                   <button
                     type="button"
-                    onContextMenu={(e) => e.preventDefault()}
                     onPointerDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       handleToggleTrain();
                     }}
-                    className="flex items-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl font-display font-bold text-[10px] sm:text-xs bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 shadow-[0_0_16px_rgba(245,158,11,0.6)] border border-white/90 active:scale-95 transition-transform cursor-pointer touch-none select-none"
+                    className="flex items-center gap-1 px-2 py-1 sm:px-3 sm:py-2 rounded-xl font-display font-bold text-[9px] sm:text-xs bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 shadow-[0_0_16px_rgba(245,158,11,0.6)] border border-white/90 active:scale-95 transition-transform cursor-pointer touch-none select-none"
                   >
-                    <TrainFront className="w-3.5 h-3.5 shrink-0 pointer-events-none select-none" />
-                    <span className="pointer-events-none select-none">
-                      {inTrain ? 'ট্রেন থেকে নামুন' : 'ট্রেনে উঠুন'}
-                    </span>
+                    <TrainFront className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                    <span>{inTrain ? 'নামুন' : 'ট্রেন'}</span>
                   </button>
                 )}
 
-                {((!inVehicle && nearestVehicle?.driverNpcId && nearestVehicle?.allowsPlayerPassenger) ||
-                  inVehicle) && (
+                {((!inVehicle && nearestVehicle?.driverNpcId && nearestVehicle?.allowsPlayerPassenger) || inVehicle) && (
                   <button
                     type="button"
-                    onContextMenu={(e) => e.preventDefault()}
                     onPointerDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       handleCoRideOrInvitePassenger();
                     }}
-                    className="flex items-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl font-display font-bold text-[10px] sm:text-[11px] bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-[0_0_16px_rgba(236,72,153,0.55)] border border-white/85 active:scale-95 transition-transform cursor-pointer touch-none select-none"
+                    className="flex items-center gap-1 px-2 py-1 sm:px-3 sm:py-2 rounded-xl font-display font-bold text-[9px] sm:text-[11px] bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-[0_0_16px_rgba(236,72,153,0.55)] border border-white/85 active:scale-95 transition-transform cursor-pointer touch-none select-none"
                   >
-                    <UserPlus className="w-3.5 h-3.5 shrink-0 pointer-events-none select-none" />
-                    <span className="pointer-events-none select-none">
+                    <UserPlus className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                    <span>
                       {inVehicle && inVehicleSeat === 'passenger'
-                        ? 'সিট থেকে নামুন'
+                        ? 'নামুন'
                         : inVehicle && inVehicle.passengerNpcId
-                          ? 'যাত্রী নামান'
+                          ? 'নামান'
                           : inVehicle
-                            ? 'যাত্রী ডাকুন (G)'
-                            : 'যাত্রী হয়ে উঠুন'}
+                            ? 'যাত্রী (G)'
+                            : 'যাত্রী'}
                     </span>
                   </button>
                 )}
@@ -2041,55 +2137,42 @@ export default function App() {
                 {(nearestVehicle || inVehicle) && !inTrain && (
                   <button
                     type="button"
-                    onContextMenu={(e) => e.preventDefault()}
                     onPointerDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       handleToggleVehicle();
                     }}
-                    className="flex items-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl font-display font-bold text-[10px] sm:text-xs bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-[0_0_16px_rgba(0,240,255,0.55)] border border-white/85 active:scale-95 transition-transform cursor-pointer touch-none select-none"
+                    className="flex items-center gap-1 px-2 py-1 sm:px-3 sm:py-2 rounded-xl font-display font-bold text-[9px] sm:text-xs bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-[0_0_16px_rgba(0,240,255,0.55)] border border-white/85 active:scale-95 transition-transform cursor-pointer touch-none select-none"
                   >
-                    <CarFront className="w-3.5 h-3.5 shrink-0 pointer-events-none select-none" />
-                    <span className="pointer-events-none select-none">
-                      {inVehicle
-                        ? 'গাড়ি থেকে নামুন'
-                        : `${nearestVehicle?.name.split(' ')[0] || 'গাড়ি'} চালান`}
-                    </span>
+                    <CarFront className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                    <span>{inVehicle ? 'নামুন' : `${nearestVehicle?.name.split(' ')[0] || 'গাড়ি'}`}</span>
                   </button>
                 )}
 
                 {!isPlayerDriving && (
                   <button
                     type="button"
-                    onContextMenu={(e) => e.preventDefault()}
                     onPointerDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       handleChantMichilSlogan();
                     }}
-                    className="flex items-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl font-display font-bold text-[10px] sm:text-[11px] bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.45)] border border-white/80 active:scale-95 transition-transform cursor-pointer touch-none select-none"
+                    className="flex items-center gap-1 px-2 py-1 sm:px-3 sm:py-2 rounded-xl font-display font-bold text-[9px] sm:text-[11px] bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.45)] border border-white/80 active:scale-95 transition-transform cursor-pointer touch-none select-none"
                   >
-                    <Megaphone className="w-3.5 h-3.5 shrink-0 pointer-events-none select-none" />
-                    <span className="pointer-events-none select-none">মিছিল স্লোগান</span>
+                    <Megaphone className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                    <span>স্লোগান</span>
                   </button>
                 )}
               </div>
 
-              {/* Column 2: DEDICATED FORWARD & BACKWARD DRIVING BUTTONS (সামনে ▲ এবং পিছনে ▼ বাটন) */}
               {isPlayerDriving && (
-                <div className="flex flex-col items-center gap-1.5 select-none">
+                <div className="flex flex-col items-center gap-1">
                   <button
                     type="button"
-                    onContextMenu={(e) => e.preventDefault()}
-                    onDragStart={(e) => e.preventDefault()}
                     onPointerDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      try {
-                        e.currentTarget.setPointerCapture(e.pointerId);
-                      } catch {
-                        // ignore
-                      }
+                      try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
                       setDrivingDirection('forward', true);
                     }}
                     onPointerUp={(e) => {
@@ -2099,30 +2182,22 @@ export default function App() {
                     }}
                     onPointerCancel={() => setDrivingDirection('forward', false)}
                     onLostPointerCapture={() => setDrivingDirection('forward', false)}
-                    className={`w-15 h-12 sm:w-20 sm:h-16 rounded-2xl border-2 flex flex-col items-center justify-center touch-none select-none cursor-pointer transition-transform ${
+                    className={`w-10 h-9 sm:w-20 sm:h-16 rounded-xl border-2 flex flex-col items-center justify-center touch-none select-none cursor-pointer transition-transform ${
                       driveBtnState.forward
                         ? 'bg-emerald-400 text-slate-950 border-white scale-95 shadow-[0_0_24px_rgba(16,185,129,0.95)]'
                         : 'bg-gradient-to-b from-emerald-500 to-teal-600 text-slate-950 border-white/90 shadow-[0_0_16px_rgba(16,185,129,0.5)]'
                     }`}
                   >
-                    <ArrowUp className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.8] pointer-events-none select-none" />
-                    <span className="font-display text-[9.5px] sm:text-[11px] font-black pointer-events-none select-none">
-                      সামনে
-                    </span>
+                    <ArrowUp className="w-3.5 h-3.5 sm:w-6 sm:h-6 stroke-[2.8]" />
+                    <span className="font-display text-[7.5px] sm:text-[11px] font-black">সামনে</span>
                   </button>
 
                   <button
                     type="button"
-                    onContextMenu={(e) => e.preventDefault()}
-                    onDragStart={(e) => e.preventDefault()}
                     onPointerDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      try {
-                        e.currentTarget.setPointerCapture(e.pointerId);
-                      } catch {
-                        // ignore
-                      }
+                      try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
                       setDrivingDirection('backward', true);
                     }}
                     onPointerUp={(e) => {
@@ -2132,34 +2207,29 @@ export default function App() {
                     }}
                     onPointerCancel={() => setDrivingDirection('backward', false)}
                     onLostPointerCapture={() => setDrivingDirection('backward', false)}
-                    className={`w-15 h-11 sm:w-20 sm:h-14 rounded-2xl border-2 flex flex-col items-center justify-center touch-none select-none cursor-pointer transition-transform ${
+                    className={`w-10 h-8 sm:w-20 sm:h-14 rounded-xl border-2 flex flex-col items-center justify-center touch-none select-none cursor-pointer transition-transform ${
                       driveBtnState.backward
                         ? 'bg-rose-500 text-white border-white scale-95 shadow-[0_0_22px_rgba(244,63,94,0.9)]'
                         : 'bg-[#0B0616]/90 text-rose-300 border-rose-500/75 shadow-[0_0_14px_rgba(244,63,94,0.3)]'
                     }`}
                   >
-                    <ArrowDown className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5] pointer-events-none select-none" />
-                    <span className="font-display text-[9.5px] sm:text-[10.5px] font-extrabold pointer-events-none select-none">
-                      পিছনে
-                    </span>
+                    <ArrowDown className="w-2.5 h-2.5 sm:w-5 sm:h-5 stroke-[2.5]" />
+                    <span className="font-display text-[7.5px] sm:text-[10.5px] font-extrabold">পিছনে</span>
                   </button>
                 </div>
               )}
 
-              {/* Column 3: Primary Combat / Horn / Rickshaw Bell / Siren Button */}
               <button
                 type="button"
-                onContextMenu={(e) => e.preventDefault()}
-                onDragStart={(e) => e.preventDefault()}
                 onPointerDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
                   handlePlayerAttack();
                 }}
-                className="w-13 h-13 sm:w-16 sm:h-16 rounded-full bg-gradient-to-br from-rose-600 via-pink-600 to-amber-500 text-white shadow-[0_0_24px_rgba(244,63,94,0.7)] border-2 border-white/90 flex flex-col items-center justify-center active:scale-90 transition-transform cursor-pointer touch-none select-none shrink-0"
+                className="w-10 h-10 sm:w-16 sm:h-16 rounded-full bg-gradient-to-br from-rose-600 via-pink-600 to-amber-500 text-white shadow-[0_0_24px_rgba(244,63,94,0.7)] border-2 border-white/90 flex flex-col items-center justify-center active:scale-90 transition-transform cursor-pointer touch-none select-none shrink-0"
               >
-                <Swords className="w-4 h-4 sm:w-5 sm:h-5 pointer-events-none select-none" />
-                <span className="font-display text-[9px] sm:text-[9.5px] font-extrabold tracking-wider uppercase mt-0.5 pointer-events-none select-none">
+                <Swords className="w-3 h-3 sm:w-5 sm:h-5" />
+                <span className="font-display text-[7px] sm:text-[9.5px] font-extrabold tracking-wider uppercase mt-0.5">
                   {inVehicle?.type === 'RICKSHAW'
                     ? 'বেল'
                     : inVehicle?.type === 'POLICE_CRUISER'
@@ -2172,6 +2242,8 @@ export default function App() {
             </div>
           </>
         )}
+
+
 
         {/* Title Screen / Game Over / Victory Modal (Mobile Scrollable & Compact) */}
         {gameState !== 'PLAYING' && (

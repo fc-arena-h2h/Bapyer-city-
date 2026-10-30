@@ -29,34 +29,49 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: 🤖 Accept Pre-installed Android SDK Licenses
+      - name: 🤖 Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 🤖 Accept Android SDK Licenses
         run: |
-          if [ -d "$ANDROID_HOME/cmdline-tools/latest/bin" ]; then
-            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-          elif [ -d "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" ]; then
-            export ANDROID_HOME="/usr/local/lib/android/sdk"
-            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-          fi
+          yes | sdkmanager --licenses || true
+          mkdir -p "$ANDROID_HOME/licenses"
+          # Standard Android SDK License
+          printf "8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451eabf01fb7437c3550b310113c5\n233317399876324a8200fd6920f11ae1990c9b7d" > "$ANDROID_HOME/licenses/android-sdk-license"
+          # Android SDK Preview License
+          printf "84831b9409646a918e30573bab4c9c91346d8abd" > "$ANDROID_HOME/licenses/android-sdk-preview-license"
+          # Google TV License
+          printf "6a776732d1c309113880352528148b3074092b7c" > "$ANDROID_HOME/licenses/android-googletv-license"
+          # Android SDK ARM DBT License
+          printf "33b6a2b64607f11b759f320ef9dffed5aa9e0e76" > "$ANDROID_HOME/licenses/android-sdk-arm-dbt-license"
+          # Glass SDK License
+          printf "504667f4d0ddf3a9f2d7b521bc9396a092c1c17d" > "$ANDROID_HOME/licenses/glass-software-license"
+
 
       - name: 📦 Install Web Dependencies & Build Baper City Web Bundle
         run: |
           npm install --legacy-peer-deps
           npm run build
 
-      - name: ⚡ Install Capacitor Android & Generate Android Project
+      - name: ⚡ Install Capacitor Android & Native TTS Plugin
         run: |
-          npm install --legacy-peer-deps @capacitor/core @capacitor/cli @capacitor/android
+          npm install --legacy-peer-deps @capacitor/core @capacitor/cli @capacitor/android @capacitor-community/text-to-speech
           if [ ! -d "android" ]; then
             npx cap add android
           fi
           npx cap copy android
           npx cap sync android
 
-      - name: 🎮 Configure Landscape Orientation in AndroidManifest.xml
+      - name: 🎮 Configure Landscape Orientation & Android TTS Service Queries in AndroidManifest.xml
         run: |
           MANIFEST_FILE="android/app/src/main/AndroidManifest.xml"
-          if [ -f "$MANIFEST_FILE" ] && ! grep -q "android:screenOrientation" "$MANIFEST_FILE"; then
-            sed -i 's/android:name=".MainActivity"/android:name=".MainActivity" android:screenOrientation="sensorLandscape"/g' "$MANIFEST_FILE"
+          if [ -f "$MANIFEST_FILE" ]; then
+            if ! grep -q "android:screenOrientation" "$MANIFEST_FILE"; then
+              sed -i 's/android:name=".MainActivity"/android:name=".MainActivity" android:screenOrientation="sensorLandscape"/g' "$MANIFEST_FILE"
+            fi
+            if ! grep -q "TTS_SERVICE" "$MANIFEST_FILE"; then
+              sed -i 's/<\/manifest>/<queries><intent><action android:name="android.intent.action.TTS_SERVICE" \/><\/intent><\/queries><\/manifest>/g' "$MANIFEST_FILE"
+            fi
           fi
 
       - name: 🔨 Build Signed Installable Android APK with Gradle
