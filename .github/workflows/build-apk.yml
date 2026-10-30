@@ -1,0 +1,83 @@
+name: Build Baper City Android APK
+
+on:
+  push:
+    branches:
+      - '*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-android-apk:
+    name: Build Installable Android APK (বাপের সিটি)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository Code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: ☕ Setup Java JDK 21 (Required for Android Gradle Build)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: 🤖 Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 📦 Install Web Dependencies & Build Baper City Web Bundle
+        run: |
+          npm install --legacy-peer-deps
+          npm run build
+
+      - name: ⚡ Install Capacitor Android & Initialize Android Project
+        run: |
+          npm install --no-save --legacy-peer-deps @capacitor/core@^6.0.0 @capacitor/cli@^6.0.0 @capacitor/android@^6.0.0
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+          npx cap sync android
+
+      - name: 🎮 Configure Landscape Orientation in AndroidManifest.xml
+        run: |
+          MANIFEST_FILE="android/app/src/main/AndroidManifest.xml"
+          if [ -f "$MANIFEST_FILE" ] && ! grep -q "android:screenOrientation" "$MANIFEST_FILE"; then
+            sed -i 's/android:name=".MainActivity"/android:name=".MainActivity" android:screenOrientation="sensorLandscape"/g' "$MANIFEST_FILE"
+          fi
+
+      - name: 🔨 Build Signed Installable Android APK with Gradle
+        working-directory: ./android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk ../BaperCity-Android.apk
+
+      - name: 📤 Upload APK as Downloadable GitHub Actions Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BaperCity-Android-APK
+          path: BaperCity-Android.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 🚀 Publish Direct APK to GitHub Releases (One-Tap Mobile Download)
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-apk
+          name: "বাপের সিটি (Baper City) — Android APK"
+          body: |
+            ### 📱 বাপের সিটি (Baper City) Android APK
+            নিচের **Assets** সেকশন থেকে `BaperCity-Android.apk` ফাইলটি সরাসরি আপনার অ্যান্ড্রয়েড ফোনে ডাউনলোড করে ইনস্টল করুন।
+          files: BaperCity-Android.apk
+          prerelease: false
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

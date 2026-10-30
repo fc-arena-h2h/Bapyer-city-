@@ -1,0 +1,6 @@
+{
+  "name": "Vice City: Neon Syndicate",
+  "description": "A 2D/3D top-down open-world action game inspired by GTA Vice City featuring an autonomous AI underworld NPC named Viper powered by Gemini.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

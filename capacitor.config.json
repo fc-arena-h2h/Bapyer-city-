@@ -1,0 +1,9 @@
+{
+  "appId": "com.bapercity.game",
+  "appName": "Baper City",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}
