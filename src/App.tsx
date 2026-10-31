@@ -122,6 +122,10 @@ const createInitialWorld = (): WorldSimulationRef => ({
     is3DMode: true,
     yaw3D: Math.PI / 2,
     pitch3D: 0.24,
+    weatherMode: 'DAY',
+    sensitivity3D: 1.0,
+    qualityPreset: 'ULTRA_2K',
+    liveFps: 60,
   },
   hitstopTimer: 0,
   mobAlertTimer: 0,
@@ -182,6 +186,12 @@ export default function App() {
   const [isRunningMode, setIsRunningMode] = useState<boolean>(false);
   const [cameraAngleLevel, setCameraAngleLevel] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [is3DMode, setIs3DMode] = useState<boolean>(true);
+  const [weatherMode, setWeatherMode] = useState<'DAY' | 'SUNSET' | 'NIGHT'>('DAY');
+  const [sensitivity3D, setSensitivity3D] = useState<number>(1.0);
+  const [qualityPreset, setQualityPreset] = useState<'PERFORMANCE' | 'HD' | 'ULTRA_2K'>('ULTRA_2K');
+  const [liveFps, setLiveFps] = useState<number>(60);
+  const [settingsDrawerOpen, setSettingsDrawerOpen] = useState<boolean>(false);
+  const [minimapExpanded, setMinimapExpanded] = useState<boolean>(false);
   const [currentInteriorZone, setCurrentInteriorZone] = useState<
     | 'PLAYER_HOME'
     | 'GARMENTS'
@@ -353,6 +363,9 @@ export default function App() {
     const yaw = w.camera.yaw3D ?? w.player.angle ?? Math.PI / 2;
     const deg = (((Math.round((yaw * 180) / Math.PI) + 90) % 360) + 360) % 360;
     setCompassDeg(deg);
+    if (w.camera.liveFps) {
+      setLiveFps(w.camera.liveFps);
+    }
 
     if (px >= 1850 && px <= 2520 && py >= 700 && py <= 915) {
       setCurrentInteriorZone('PLAYER_HOME');
@@ -526,12 +539,40 @@ export default function App() {
     }
 
     if (p.punchCooldown > 0) return;
-    p.punchCooldown = 0.35;
-    p.punchTimer = 0.22;
+    p.punchCooldown = 0.32;
+    p.punchTimer = 0.24;
     p.punchHand = p.punchHand === 'right' ? 'left' : 'right';
     sound.playPunchSwing?.(0);
 
-    const punchReach = 76;
+    // Free Fire / GTA 3D Auto-Aim Target Lock & Combat Lunge
+    if (w.camera.is3DMode) {
+      let lockedNpc: CommunityNPCState | null = null;
+      let bestDist = 135;
+      for (const npc of w.npcs) {
+        if (npc.hp <= 0 || npc.drivingVehicleId || npc.ridingVehicleId || npc.inTrain) continue;
+        const d = Math.hypot(npc.x - p.x, npc.y - p.y);
+        if (d < bestDist) {
+          bestDist = d;
+          lockedNpc = npc;
+        }
+      }
+      if (lockedNpc) {
+        p.angle = Math.atan2(lockedNpc.y - p.y, lockedNpc.x - p.x);
+        if (bestDist > 38) {
+          const lungePos = resolveCircleBuildingCollision(
+            p.x + Math.cos(p.angle) * 16,
+            p.y + Math.sin(p.angle) * 16,
+            18
+          );
+          p.x = lungePos.x;
+          p.y = lungePos.y;
+        }
+      } else if (w.camera.yaw3D !== undefined) {
+        p.angle = w.camera.yaw3D;
+      }
+    }
+
+    const punchReach = w.camera.is3DMode ? 94 : 76;
     const hitX = p.x + Math.cos(p.angle) * 34;
     const hitY = p.y + Math.sin(p.angle) * 34;
 
@@ -1524,6 +1565,9 @@ export default function App() {
     worldRef.current.player.isRunning = isRunningMode;
     worldRef.current.camera.angleLevel = cameraAngleLevel;
     worldRef.current.camera.is3DMode = is3DMode;
+    worldRef.current.camera.weatherMode = weatherMode;
+    worldRef.current.camera.sensitivity3D = sensitivity3D;
+    worldRef.current.camera.qualityPreset = qualityPreset;
     clearDrivingKeys();
     resetJoystickState();
     setPlayerHp(100);
@@ -1615,9 +1659,22 @@ export default function App() {
           />
         )}
 
-        {/* Google Maps Style Live Dhaka City Radar Minimap (Shown in 3D Mode) */}
+        {/* Google Maps Style Live Dhaka City Radar Minimap (Tap to Expand/Shrink + 3D Camera Direction Cone) */}
         {is3DMode && gameState === 'PLAYING' && (
-          <div className="absolute top-12 left-2 sm:top-14 sm:left-3 z-20 pointer-events-none w-[112px] h-[84px] sm:w-[156px] sm:h-[116px] rounded-xl bg-[#090d16]/95 border border-cyan-400/60 shadow-[0_4px_16px_rgba(0,0,0,0.6)] overflow-hidden">
+          <div
+            onClick={() => setMinimapExpanded((prev) => !prev)}
+            className={`
+              absolute top-12 left-2 sm:top-14 sm:left-3 z-20 pointer-events-auto cursor-pointer
+              rounded-xl bg-[#090d16]/95 border border-cyan-400/70 shadow-[0_4px_18px_rgba(0,0,0,0.75)]
+              overflow-hidden transition-all duration-200
+              ${
+                minimapExpanded
+                  ? 'w-[225px] h-[168px] sm:w-[290px] sm:h-[216px]'
+                  : 'w-[116px] h-[86px] sm:w-[158px] sm:h-[118px]'
+              }
+            `}
+            title="ম্যাপ বড় বা ছোট করতে ট্যাপ করুন"
+          >
             {/* Ramna Green Park Zone */}
             <div
               className="absolute bg-emerald-500/35 border border-emerald-400/40 rounded-xs"
@@ -1640,7 +1697,7 @@ export default function App() {
             />
             {/* Player's Own Home Villa Highlight */}
             <div
-              className="absolute border border-cyan-300 bg-cyan-400/20"
+              className="absolute border border-cyan-300 bg-cyan-400/25"
               style={{
                 left: `${(PLAYER_HOME_RECT.x / WORLD_WIDTH) * 100}%`,
                 top: `${(PLAYER_HOME_RECT.y / WORLD_HEIGHT) * 100}%`,
@@ -1661,6 +1718,30 @@ export default function App() {
                 }}
               />
             ))}
+            {/* Vehicle Blips */}
+            {worldRef.current.vehicles.slice(0, 12).map((v) => (
+              <div
+                key={v.id}
+                className="absolute w-1.5 h-1.5 -ml-0.75 -mt-0.75 rounded-full bg-amber-300/85"
+                style={{
+                  left: `${(v.x / WORLD_WIDTH) * 100}%`,
+                  top: `${(v.y / WORLD_HEIGHT) * 100}%`,
+                }}
+              />
+            ))}
+            {/* Main Chandabaj Boss (Kala Jahangir) Red Blip */}
+            {worldRef.current.npcs
+              .filter((n) => n.role === 'CHANDABAJ' && n.hp > 0)
+              .map((boss) => (
+                <div
+                  key={boss.id}
+                  className="absolute w-2 h-2 -ml-1 -mt-1 rounded-full bg-rose-500 border border-white"
+                  style={{
+                    left: `${(boss.x / WORLD_WIDTH) * 100}%`,
+                    top: `${(boss.y / WORLD_HEIGHT) * 100}%`,
+                  }}
+                />
+              ))}
             {/* Moving Metro Train Blip */}
             <div
               className="absolute w-2 h-2 -ml-1 -mt-1 bg-sky-400 rounded-xs border border-white"
@@ -1669,17 +1750,24 @@ export default function App() {
                 top: `${(worldRef.current.train.y / WORLD_HEIGHT) * 100}%`,
               }}
             />
-            {/* Player Live GPS Position Pin */}
+            {/* Player Live GPS Position Pin + Rotating 3D Camera View Cone */}
             <div
-              className="absolute w-2.5 h-2.5 -ml-1.25 -mt-1.25 rounded-full bg-cyan-300 border border-slate-950 shadow-[0_0_8px_#00f0ff]"
+              className="absolute w-5 h-5 -ml-2.5 -mt-2.5 flex items-center justify-center"
               style={{
                 left: `${(worldRef.current.player.x / WORLD_WIDTH) * 100}%`,
                 top: `${(worldRef.current.player.y / WORLD_HEIGHT) * 100}%`,
+                transform: `rotate(${compassDeg}deg)`,
               }}
-            />
-            <div className="absolute bottom-0.5 left-1 right-1 flex items-center justify-between text-[7.5px] sm:text-[8.5px] font-mono font-bold text-cyan-200 bg-black/65 px-1 rounded">
+            >
+              {/* Directional FOV Wedge */}
+              <div
+                className="absolute -top-2.5 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[10px] border-t-cyan-400/55"
+              />
+              <div className="w-2.5 h-2.5 rounded-full bg-cyan-300 border border-slate-950 shadow-[0_0_8px_#00f0ff]" />
+            </div>
+            <div className="absolute bottom-0.5 left-1 right-1 flex items-center justify-between text-[7.5px] sm:text-[8.5px] font-mono font-bold text-cyan-200 bg-black/75 px-1 rounded">
               <span>📍 ঢাকা 3D ম্যাপ</span>
-              <span className="text-amber-300">শাহবাগ·মতিঝিল</span>
+              <span className="text-amber-300">{minimapExpanded ? 'ছোট করুন ▾' : 'বড় করুন ▴'}</span>
             </div>
           </div>
         )}
@@ -1752,6 +1840,17 @@ export default function App() {
                   </span>
                 )}
               </div>
+            )}
+
+            {/* High-Speed Sprint & Vehicle Nitro Wind-Lines Effect (3D Immersion) */}
+            {(isRunningMode || (inVehicle && Math.abs(inVehicle.speed) > 220)) && (
+              <div
+                className="fixed inset-0 pointer-events-none z-10 opacity-45"
+                style={{
+                  background:
+                    'radial-gradient(circle at 50% 50%, transparent 58%, rgba(56, 189, 248, 0.16) 85%, rgba(251, 191, 36, 0.24) 100%)',
+                }}
+              />
             )}
           </>
         )}
@@ -1927,17 +2026,74 @@ export default function App() {
               })}
             </div>
 
+            {/* 3D Day / Sunset / Night Weather Mode Button */}
+            {is3DMode && (
+              <button
+                type="button"
+                onClick={() => {
+                  setWeatherMode((prev) => {
+                    const next =
+                      prev === 'DAY' ? 'SUNSET' : prev === 'SUNSET' ? 'NIGHT' : 'DAY';
+                    worldRef.current.camera.weatherMode = next;
+                    setCommunityBannerText(
+                      next === 'DAY'
+                        ? '☀️ ঢাকার রৌদ্রোজ্জ্বল দিন (Sunny Day Mode) চালু হয়েছে!'
+                        : next === 'SUNSET'
+                          ? '🌇 ঢাকার সোনালী গোধূলি বিকেল (Golden Sunset Mode) চালু হয়েছে!'
+                          : '🌙 ঢাকার নিওন রাত ও স্ট্রিটলাইট মোড (Neon Night Mode) চালু হয়েছে!'
+                    );
+                    return next;
+                  });
+                }}
+                className="px-2 py-1 rounded-xl bg-[#0B0616]/95 border border-sky-400/55 text-sky-200 hover:text-white font-display font-bold text-[9.5px] sm:text-[10px] flex items-center gap-1 cursor-pointer"
+                title="দিন / বিকেল / রাত আবহাওয়া পরিবর্তন করুন"
+              >
+                <span>
+                  {weatherMode === 'DAY'
+                    ? '☀️ দিন'
+                    : weatherMode === 'SUNSET'
+                      ? '🌇 বিকেল'
+                      : '🌙 রাত'}
+                </span>
+              </button>
+            )}
+
+            {/* 3D Sensitivity, Resolution & Live FPS Settings Toggle Button */}
+            {is3DMode && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSettingsDrawerOpen((prev) => !prev);
+                  setMissionDrawerOpen(false);
+                  setChatDrawerOpen(false);
+                }}
+                className={`px-2 py-1 rounded-xl border font-mono font-bold text-[9.5px] sm:text-[10px] flex items-center gap-1 cursor-pointer transition-all ${
+                  settingsDrawerOpen
+                    ? 'bg-emerald-400 text-slate-950 border-white shadow-[0_0_14px_rgba(16,185,129,0.8)]'
+                    : 'bg-[#0B0616]/95 text-emerald-300 border-emerald-500/55 hover:border-emerald-300'
+                }`}
+                title="3D সেনসিটিভিটি, FPS ও রেজোলিউশন সেটিংস"
+              >
+                <Cpu className="w-3 h-3 text-emerald-400 shrink-0" />
+                <span>{liveFps} FPS</span>
+                <span className="hidden sm:inline text-amber-300">
+                  · {qualityPreset === 'ULTRA_2K' ? 'Ultra 2K' : qualityPreset === 'HD' ? 'HD' : '60FPS'}
+                </span>
+              </button>
+            )}
+
             {/* Chat Bar Show/Hide Toggle */}
             <button
               type="button"
               onClick={() => {
                 setChatDrawerOpen((prev) => !prev);
                 setMissionDrawerOpen(false);
+                setSettingsDrawerOpen(false);
               }}
-              className={`px-2 py-1.5 rounded-xl backdrop-blur-md border transition-colors cursor-pointer flex items-center gap-1 ${
+              className={`px-2 py-1.5 rounded-xl border transition-colors cursor-pointer flex items-center gap-1 ${
                 chatDrawerOpen
                   ? 'bg-pink-500 text-white border-white shadow-[0_0_16px_rgba(236,72,153,0.7)]'
-                  : 'bg-[#0B0616]/90 border-pink-500/45 text-pink-300 hover:text-white'
+                  : 'bg-[#0B0616]/95 border-pink-500/45 text-pink-300 hover:text-white'
               }`}
               title="চ্যাট বক্স খুলুন/বন্ধ করুন"
             >
@@ -1950,7 +2106,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setForceLandscapeOnPortrait((prev) => !prev)}
-                className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-[#0B0616]/90 backdrop-blur-md border border-amber-500/50 text-amber-300 hover:text-white text-[10px] font-mono cursor-pointer"
+                className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-[#0B0616]/95 border border-amber-500/50 text-amber-300 hover:text-white text-[10px] font-mono cursor-pointer"
                 title="আড়াআড়ি / লম্বালম্বি ভিউ পরিবর্তন করুন"
               >
                 <Smartphone className="w-3.5 h-3.5 rotate-90 text-amber-400" />
@@ -1964,7 +2120,7 @@ export default function App() {
             <button
               type="button"
               onClick={toggleSound}
-              className="p-1.5 sm:px-2 sm:py-1.5 rounded-xl bg-[#0B0616]/90 backdrop-blur-md border border-cyan-500/40 text-cyan-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
+              className="p-1.5 sm:px-2 sm:py-1.5 rounded-xl bg-[#0B0616]/95 border border-cyan-500/40 text-cyan-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
               title={soundMuted ? 'Unmute Voices' : 'Mute Voices'}
             >
               {soundMuted ? (
@@ -1981,7 +2137,7 @@ export default function App() {
                 sound.speakCharacterLine?.('বাপের সিটি সাউন্ড চেক সম্পন্ন!');
                 setCommunityBannerText('🔊 সাউন্ড সিস্টেম সচল হয়েছে!');
               }}
-              className="p-1.5 rounded-xl bg-[#0B0616]/90 backdrop-blur-md border border-emerald-500/40 text-emerald-400 hover:text-white transition-colors cursor-pointer"
+              className="p-1.5 rounded-xl bg-[#0B0616]/95 border border-emerald-500/40 text-emerald-400 hover:text-white transition-colors cursor-pointer"
               title="সাউন্ড চেক করুন"
             >
               <Radio className="w-3.5 h-3.5" />
@@ -1991,7 +2147,7 @@ export default function App() {
             <button
               type="button"
               onClick={handleStartOrResetGame}
-              className="p-1.5 rounded-xl bg-[#0B0616]/90 backdrop-blur-md border border-slate-700/80 text-slate-300 hover:text-white transition-colors cursor-pointer"
+              className="p-1.5 rounded-xl bg-[#0B0616]/95 border border-slate-700/80 text-slate-300 hover:text-white transition-colors cursor-pointer"
               title="গেম রিস্টার্ট করুন"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -2001,7 +2157,7 @@ export default function App() {
 
         {/* Floating Mission Checklist Popover (Opens cleanly under Top-Left when 🎯 মিশন is tapped) */}
         {gameState === 'PLAYING' && missionDrawerOpen && (
-          <div className="absolute top-13 left-2.5 z-30 w-60 bg-[#0B0616]/95 backdrop-blur-md border border-amber-500/60 rounded-xl p-2.5 shadow-[0_0_25px_rgba(245,158,11,0.25)] pointer-events-auto">
+          <div className="absolute top-13 left-2.5 z-30 w-60 bg-[#0B0616]/95 border border-amber-500/60 rounded-xl p-2.5 shadow-[0_0_25px_rgba(245,158,11,0.25)] pointer-events-auto">
             <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-slate-800">
               <span className="font-display text-[11px] font-black text-amber-300">
                 🎯 মেইন ক্যারেক্টারের মিশন ({completedMissionsCount}/{missions.length})
@@ -2030,9 +2186,146 @@ export default function App() {
           </div>
         )}
 
+        {/* Floating 3D Graphics, Resolution, FPS & Sensitivity Control Drawer */}
+        {gameState === 'PLAYING' && is3DMode && settingsDrawerOpen && (
+          <div className="absolute top-12 right-2.5 z-30 w-72 sm:w-80 bg-[#0B0616]/95 border border-emerald-400/65 rounded-xl p-3 shadow-[0_0_28px_rgba(16,185,129,0.3)] pointer-events-auto select-none space-y-2.5">
+            <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span className="font-display text-[11px] font-black text-emerald-300">
+                  ⚙️ ৩ডি সেনসিটিভিটি, FPS ও রেজোলিউশন
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSettingsDrawerOpen(false)}
+                className="text-[10px] font-mono text-slate-300 hover:text-white px-2 py-0.5 rounded bg-slate-900 border border-slate-700 cursor-pointer"
+              >
+                বন্ধ ✕
+              </button>
+            </div>
+
+            {/* Live Performance Telemetry Pill */}
+            <div className="flex items-center justify-between bg-slate-900/90 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-[10px] font-mono">
+              <span className="text-slate-300">লাইভ ফ্রেমরেট (FPS):</span>
+              <span className="text-emerald-400 font-bold">
+                ⚡ {liveFps} FPS · PBR Bump & Anisotropic 16x
+              </span>
+            </div>
+
+            {/* 3D Touch-Look Camera Sensitivity Slider (30% - 200%) */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[10.5px]">
+                <span className="font-display font-bold text-cyan-200">
+                  🎯 ৩ডি ক্যামেরা সেনসিটিভিটি (Free Fire Look)
+                </span>
+                <span className="font-mono font-extrabold text-amber-300">
+                  {Math.round(sensitivity3D * 100)}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0.3}
+                max={2.0}
+                step={0.05}
+                value={sensitivity3D}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setSensitivity3D(val);
+                  worldRef.current.camera.sensitivity3D = val;
+                }}
+                className="w-full accent-emerald-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+              />
+              <div className="flex items-center justify-between gap-1 pt-0.5">
+                {[
+                  { label: 'স্লো (60%)', val: 0.6 },
+                  { label: 'নরমাল (100%)', val: 1.0 },
+                  { label: 'ফাস্ট (140%)', val: 1.4 },
+                  { label: 'আলট্রা (185%)', val: 1.85 },
+                ].map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => {
+                      setSensitivity3D(preset.val);
+                      worldRef.current.camera.sensitivity3D = preset.val;
+                    }}
+                    className={`flex-1 py-1 rounded text-[9px] font-mono font-bold border cursor-pointer transition-all ${
+                      Math.abs(sensitivity3D - preset.val) < 0.06
+                        ? 'bg-cyan-400 text-slate-950 border-white'
+                        : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-cyan-400/60'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 3D Resolution & Graphics Quality Selector */}
+            <div className="space-y-1">
+              <span className="font-display font-bold text-[10.5px] text-amber-200 block">
+                🖥️ ৩ডি রেজোলিউশন ও গ্রাফিক্স মোড:
+              </span>
+              <div className="grid grid-cols-3 gap-1.5">
+                {(
+                  [
+                    {
+                      id: 'PERFORMANCE',
+                      title: '⚡ স্মুথ 60FPS',
+                      sub: '1.0x ফাস্ট রেন্ডার',
+                    },
+                    {
+                      id: 'HD',
+                      title: '✨ HD গ্রাফিক্স',
+                      sub: '1.5x শার্প টেক্সচার',
+                    },
+                    {
+                      id: 'ULTRA_2K',
+                      title: '💎 Ultra 2K',
+                      sub: '2.25x ম্যাক্স ডিটেইল',
+                    },
+                  ] as const
+                ).map((mode) => {
+                  const active = qualityPreset === mode.id;
+                  return (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      onClick={() => {
+                        setQualityPreset(mode.id);
+                        worldRef.current.camera.qualityPreset = mode.id;
+                        setCommunityBannerText(
+                          `🖥️ ৩ডি গ্রাফিক্স মোড "${mode.title} (${mode.sub})"-এ সেট করা হয়েছে!`
+                        );
+                      }}
+                      className={`p-1.5 rounded-lg border text-left cursor-pointer transition-all ${
+                        active
+                          ? 'bg-gradient-to-br from-emerald-400 to-cyan-400 text-slate-950 border-white shadow-[0_0_12px_rgba(16,185,129,0.6)]'
+                          : 'bg-slate-900/90 text-slate-200 border-slate-700 hover:border-emerald-400/50'
+                      }`}
+                    >
+                      <div className="font-display font-black text-[9.5px] leading-tight">
+                        {mode.title}
+                      </div>
+                      <div
+                        className={`font-mono text-[8px] mt-0.5 ${
+                          active ? 'text-slate-900 font-bold' : 'text-slate-400'
+                        }`}
+                      >
+                        {mode.sub}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Top-Center Floating Chat & Quick-Talk Drawer (Never overlaps bottom thumb controls!) */}
         {gameState === 'PLAYING' && chatDrawerOpen && (
-          <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 w-[86%] max-w-[420px] bg-[#0B0616]/95 backdrop-blur-md border border-cyan-500/55 rounded-xl p-2 shadow-[0_0_28px_rgba(0,240,255,0.25)] pointer-events-auto flex flex-col gap-1.5 select-none">
+          <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 w-[86%] max-w-[420px] bg-[#0B0616]/95 border border-cyan-500/55 rounded-xl p-2 shadow-[0_0_28px_rgba(0,240,255,0.25)] pointer-events-auto flex flex-col gap-1.5 select-none">
             <div className="flex items-center justify-between gap-2">
               <div className="truncate">
                 <span className="text-[10px] font-display font-bold text-cyan-300 truncate block">
@@ -2202,7 +2495,7 @@ export default function App() {
                     activeJoystickPointerId.current = e.pointerId;
                     updateJoystickFromPointer(e.clientX, e.clientY);
                   }}
-                  className={`w-18 h-18 sm:w-28 sm:h-28 rounded-full bg-[#0B0616]/80 backdrop-blur-md border-2 flex items-center justify-center touch-none select-none cursor-pointer transition-colors ${
+                  className={`w-18 h-18 sm:w-28 sm:h-28 rounded-full bg-[#0B0616]/90 border-2 flex items-center justify-center touch-none select-none cursor-pointer transition-colors ${
                     isRunningMode
                       ? 'border-amber-400/85 shadow-[0_0_24px_rgba(245,158,11,0.35)]'
                       : 'border-cyan-500/50 shadow-[0_0_22px_rgba(0,240,255,0.2)]'

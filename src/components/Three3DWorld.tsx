@@ -62,7 +62,8 @@ function createConfiguredCanvasTexture(
   height: number,
   draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void,
   repeatX = 1,
-  repeatY = 1
+  repeatY = 1,
+  isLinearData = false
 ): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -71,88 +72,200 @@ function createConfiguredCanvasTexture(
   draw(ctx, width, height);
 
   const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
+  if (!isLinearData) {
+    tex.colorSpace = THREE.SRGBColorSpace;
+  }
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(repeatX, repeatY);
-  tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   tex.needsUpdate = true;
   return tex;
 }
 
 function createDhakaProceduralTextures(renderer: THREE.WebGLRenderer) {
-  // 1. Realistic Dhaka Asphalt Road Texture (Horizontal & Vertical) with Lane Markings & Zebra Crossings
+  // 0. Linear Bump / Roughness Micro-Surface Maps for PBR Realism
+  const asphaltBumpTex = createConfiguredCanvasTexture(
+    renderer,
+    512,
+    512,
+    (ctx, w, h) => {
+      ctx.fillStyle = '#808080';
+      ctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 6500; i++) {
+        const gx = (i * 97) % w;
+        const gy = (i * 181) % h;
+        ctx.fillStyle = i % 2 === 0 ? '#a8a8a8' : '#525252';
+        ctx.fillRect(gx, gy, 2, 2);
+      }
+    },
+    6,
+    6,
+    true
+  );
+
+  const sidewalkBumpTex = createConfiguredCanvasTexture(
+    renderer,
+    256,
+    256,
+    (ctx, w, h) => {
+      ctx.fillStyle = '#969696';
+      ctx.fillRect(0, 0, w, h);
+      const tile = 32;
+      ctx.strokeStyle = '#262626';
+      ctx.lineWidth = 3;
+      for (let i = 0; i <= w; i += tile) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i, h);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, i);
+        ctx.lineTo(w, i);
+        ctx.stroke();
+      }
+    },
+    48,
+    36,
+    true
+  );
+
+  const buildingBumpTex = createConfiguredCanvasTexture(
+    renderer,
+    512,
+    512,
+    (ctx, w, h) => {
+      ctx.fillStyle = '#888888';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#404040';
+      for (let x = 0; x < w; x += 32) {
+        ctx.fillRect(x, 0, 4, h);
+      }
+      for (let y = 52; y < h; y += 54) {
+        ctx.fillRect(0, y, w, 6);
+      }
+    },
+    1,
+    1,
+    true
+  );
+
+  // Soft Radial Contact Shadow Texture (grounds characters & vehicles on the road)
+  const contactShadowTex = createConfiguredCanvasTexture(
+    renderer,
+    128,
+    128,
+    (ctx, w, h) => {
+      ctx.clearRect(0, 0, w, h);
+      const grad = ctx.createRadialGradient(
+        w / 2,
+        h / 2,
+        4,
+        w / 2,
+        h / 2,
+        w * 0.48
+      );
+      grad.addColorStop(0, 'rgba(2, 6, 23, 0.72)');
+      grad.addColorStop(0.55, 'rgba(2, 6, 23, 0.34)');
+      grad.addColorStop(1, 'rgba(2, 6, 23, 0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+    },
+    1,
+    1
+  );
+
+  // 1. Ultra-Crisp 1024px Dhaka Asphalt Road Texture (with Zebra Crossings & Cat's-Eye Studs)
   const makeRoadTex = (isHorizontal: boolean) =>
     createConfiguredCanvasTexture(
       renderer,
-      512,
-      512,
+      1024,
+      1024,
       (ctx, w, h) => {
-        ctx.fillStyle = '#262d38';
+        ctx.fillStyle = '#1e2430';
         ctx.fillRect(0, 0, w, h);
 
-        // Micro-asphalt aggregate grain & subtle tire wear tracks
-        for (let i = 0; i < 2800; i++) {
+        // Rich asphalt stone aggregate & subtle rain-wet sheen variation
+        for (let i = 0; i < 9000; i++) {
           const gx = (i * 73) % w;
           const gy = (i * 139) % h;
           ctx.fillStyle =
-            i % 3 === 0
-              ? 'rgba(255,255,255,0.045)'
+            i % 4 === 0
+              ? 'rgba(255,255,255,0.065)'
               : i % 2 === 0
-                ? 'rgba(15,23,42,0.22)'
-                : 'rgba(148,163,184,0.04)';
-          ctx.fillRect(gx, gy, 2, 2);
+                ? 'rgba(9,13,26,0.32)'
+                : 'rgba(148,163,184,0.05)';
+          ctx.fillRect(gx, gy, 3, 3);
         }
 
         if (isHorizontal) {
-          // Darker tire wear strips
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.25)';
-          ctx.fillRect(0, h * 0.2, w, h * 0.18);
-          ctx.fillRect(0, h * 0.62, w, h * 0.18);
+          // Polished tire wear tracks
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.34)';
+          ctx.fillRect(0, h * 0.18, w, h * 0.2);
+          ctx.fillRect(0, h * 0.62, w, h * 0.2);
 
-          // Dhaka Green-White / Black-Yellow Painted Road Edges
+          // Dhaka Black-Yellow Curbs
           for (let x = 0; x < w; x += 64) {
             ctx.fillStyle = (x / 64) % 2 === 0 ? '#facc15' : '#0f172a';
-            ctx.fillRect(x, 0, 32, 12);
-            ctx.fillRect(x, h - 12, 32, 12);
+            ctx.fillRect(x, 0, 32, 18);
+            ctx.fillRect(x, h - 18, 32, 18);
             ctx.fillStyle = (x / 64) % 2 === 0 ? '#0f172a' : '#facc15';
-            ctx.fillRect(x + 32, 0, 32, 12);
-            ctx.fillRect(x + 32, h - 12, 32, 12);
+            ctx.fillRect(x + 32, 0, 32, 18);
+            ctx.fillRect(x + 32, h - 18, 32, 18);
           }
 
-          // Double Yellow Center Divider Line
+          // Double Yellow Center Median + Glowing Cat's-Eye Studs
           ctx.fillStyle = '#eab308';
-          ctx.fillRect(0, h / 2 - 7, w, 4);
-          ctx.fillRect(0, h / 2 + 3, w, 4);
+          ctx.fillRect(0, h / 2 - 11, w, 6);
+          ctx.fillRect(0, h / 2 + 5, w, 6);
+          for (let x = 24; x < w; x += 96) {
+            ctx.fillStyle = '#fef08a';
+            ctx.fillRect(x, h / 2 - 3, 10, 6);
+          }
 
           // White Dashed Lane Markings
-          ctx.fillStyle = 'rgba(248, 250, 252, 0.85)';
-          for (let x = 16; x < w; x += 64) {
-            ctx.fillRect(x, h * 0.26, 34, 4);
-            ctx.fillRect(x, h * 0.74, 34, 4);
+          ctx.fillStyle = 'rgba(248, 250, 252, 0.9)';
+          for (let x = 24; x < w; x += 96) {
+            ctx.fillRect(x, h * 0.26, 52, 6);
+            ctx.fillRect(x, h * 0.74, 52, 6);
+          }
+
+          // Pedestrian Zebra Crossing Band at Tile Edge
+          ctx.fillStyle = 'rgba(241, 245, 249, 0.82)';
+          for (let y = 36; y < h - 36; y += 44) {
+            ctx.fillRect(w - 58, y, 42, 24);
           }
         } else {
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.25)';
-          ctx.fillRect(w * 0.2, 0, w * 0.18, h);
-          ctx.fillRect(w * 0.62, 0, w * 0.18, h);
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.34)';
+          ctx.fillRect(w * 0.18, 0, w * 0.2, h);
+          ctx.fillRect(w * 0.62, 0, w * 0.2, h);
 
           for (let y = 0; y < h; y += 64) {
             ctx.fillStyle = (y / 64) % 2 === 0 ? '#facc15' : '#0f172a';
-            ctx.fillRect(0, y, 12, 32);
-            ctx.fillRect(w - 12, y, 12, 32);
+            ctx.fillRect(0, y, 18, 32);
+            ctx.fillRect(w - 18, y, 18, 32);
             ctx.fillStyle = (y / 64) % 2 === 0 ? '#0f172a' : '#facc15';
-            ctx.fillRect(0, y + 32, 12, 32);
-            ctx.fillRect(w - 12, y + 32, 12, 32);
+            ctx.fillRect(0, y + 32, 18, 32);
+            ctx.fillRect(w - 18, y + 32, 18, 32);
           }
 
           ctx.fillStyle = '#eab308';
-          ctx.fillRect(w / 2 - 7, 0, 4, h);
-          ctx.fillRect(w / 2 + 3, 0, 4, h);
+          ctx.fillRect(w / 2 - 11, 0, 6, h);
+          ctx.fillRect(w / 2 + 5, 0, 6, h);
+          for (let y = 24; y < h; y += 96) {
+            ctx.fillStyle = '#fef08a';
+            ctx.fillRect(w / 2 - 3, y, 6, 10);
+          }
 
-          ctx.fillStyle = 'rgba(248, 250, 252, 0.85)';
-          for (let y = 16; y < h; y += 64) {
-            ctx.fillRect(w * 0.26, y, 4, 34);
-            ctx.fillRect(w * 0.74, y, 4, 34);
+          ctx.fillStyle = 'rgba(248, 250, 252, 0.9)';
+          for (let y = 24; y < h; y += 96) {
+            ctx.fillRect(w * 0.26, y, 6, 52);
+            ctx.fillRect(w * 0.74, y, 6, 52);
+          }
+
+          ctx.fillStyle = 'rgba(241, 245, 249, 0.82)';
+          for (let x = 36; x < w - 36; x += 44) {
+            ctx.fillRect(x, h - 58, 24, 42);
           }
         }
       },
@@ -160,11 +273,11 @@ function createDhakaProceduralTextures(renderer: THREE.WebGLRenderer) {
       1
     );
 
-  // 2. Dhaka Footpath & Concrete Paver Tile Texture
+  // 2. Dhaka Footpath & Concrete Paver Tile Texture (512x512 with tactile yellow/red tiles)
   const sidewalkTex = createConfiguredCanvasTexture(
     renderer,
-    256,
-    256,
+    512,
+    512,
     (ctx, w, h) => {
       ctx.fillStyle = '#cbd5e1';
       ctx.fillRect(0, 0, w, h);
@@ -172,16 +285,19 @@ function createDhakaProceduralTextures(renderer: THREE.WebGLRenderer) {
       for (let y = 0; y < h; y += tile) {
         for (let x = 0; x < w; x += tile) {
           const isAlt = ((x / tile + y / tile) & 1) === 0;
-          ctx.fillStyle = isAlt ? '#d6dee8' : '#c0cad7';
+          ctx.fillStyle = isAlt ? '#d8e0ea' : '#c0cad7';
           ctx.fillRect(x + 2, y + 2, tile - 4, tile - 4);
-          // Red/terracotta Dhaka footpath accent brick every 4th block
           if ((x / tile) % 4 === 0 && (y / tile) % 4 === 0) {
             ctx.fillStyle = '#dc2626';
             ctx.fillRect(x + 4, y + 4, tile - 8, tile - 8);
+          } else if ((x / tile) === 8) {
+            // Yellow tactile guide strip common on modern Dhaka footpaths
+            ctx.fillStyle = '#eab308';
+            ctx.fillRect(x + 3, y + 3, tile - 6, tile - 6);
           }
         }
       }
-      ctx.strokeStyle = '#94a3b8';
+      ctx.strokeStyle = '#64748b';
       ctx.lineWidth = 2;
       for (let i = 0; i <= w; i += tile) {
         ctx.beginPath();
@@ -198,51 +314,57 @@ function createDhakaProceduralTextures(renderer: THREE.WebGLRenderer) {
     36
   );
 
-  // 3. Ramna Park Lush Tropical Grass Texture
+  // 3. Ramna Park Lush Tropical Grass Texture (512x512)
   const grassTex = createConfiguredCanvasTexture(
     renderer,
-    256,
-    256,
+    512,
+    512,
     (ctx, w, h) => {
       ctx.fillStyle = '#15803d';
       ctx.fillRect(0, 0, w, h);
-      for (let i = 0; i < 1200; i++) {
+      for (let i = 0; i < 3600; i++) {
         const gx = (i * 47) % w;
         const gy = (i * 89) % h;
         ctx.fillStyle =
-          i % 3 === 0 ? '#16a34a' : i % 2 === 0 ? '#22c55e' : '#14532d';
-        ctx.fillRect(gx, gy, 3, 7);
+          i % 4 === 0
+            ? '#4ade80'
+            : i % 3 === 0
+              ? '#16a34a'
+              : i % 2 === 0
+                ? '#22c55e'
+                : '#14532d';
+        ctx.fillRect(gx, gy, 3, 8);
       }
     },
-    14,
-    12
+    16,
+    14
   );
 
-  // 4. Buriganga River & Ramna Lake Water Ripple Texture
+  // 4. Buriganga River & Ramna Lake Water Ripple Texture + Normal/Bump Wave Map
   const waterTex = createConfiguredCanvasTexture(
     renderer,
-    256,
-    256,
+    512,
+    512,
     (ctx, w, h) => {
       const grad = ctx.createLinearGradient(0, 0, w, h);
       grad.addColorStop(0, '#0284c7');
       grad.addColorStop(0.5, '#0369a1');
-      grad.addColorStop(1, '#0c4a6e');
+      grad.addColorStop(1, '#075985');
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h);
 
-      ctx.strokeStyle = 'rgba(186, 230, 253, 0.35)';
-      ctx.lineWidth = 2.5;
-      for (let y = 16; y < h; y += 32) {
+      ctx.strokeStyle = 'rgba(186, 230, 253, 0.42)';
+      ctx.lineWidth = 3;
+      for (let y = 16; y < h; y += 28) {
         ctx.beginPath();
         ctx.moveTo(0, y);
-        ctx.quadraticCurveTo(w * 0.25, y - 8, w * 0.5, y);
-        ctx.quadraticCurveTo(w * 0.75, y + 8, w, y);
+        ctx.quadraticCurveTo(w * 0.25, y - 10, w * 0.5, y);
+        ctx.quadraticCurveTo(w * 0.75, y + 10, w, y);
         ctx.stroke();
       }
     },
-    18,
-    18
+    20,
+    20
   );
 
   // 5. Football Stadium Striped Turf Texture
@@ -257,10 +379,9 @@ function createDhakaProceduralTextures(renderer: THREE.WebGLRenderer) {
         ctx.fillStyle = i % 2 === 0 ? '#15803d' : '#16a34a';
         ctx.fillRect(i * stripeW, 0, stripeW, h);
       }
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
       ctx.lineWidth = 6;
       ctx.strokeRect(20, 20, w - 40, h - 40);
-      // Midline & Center Circle
       ctx.beginPath();
       ctx.moveTo(w / 2, 20);
       ctx.lineTo(w / 2, h - 20);
@@ -268,7 +389,6 @@ function createDhakaProceduralTextures(renderer: THREE.WebGLRenderer) {
       ctx.beginPath();
       ctx.arc(w / 2, h / 2, 58, 0, Math.PI * 2);
       ctx.stroke();
-      // Penalty boxes
       ctx.strokeRect(20, h * 0.24, 82, h * 0.52);
       ctx.strokeRect(w - 102, h * 0.24, 82, h * 0.52);
     },
@@ -276,7 +396,7 @@ function createDhakaProceduralTextures(renderer: THREE.WebGLRenderer) {
     1
   );
 
-  // 6. Building Facade Generator (Motijheel Glass Curtain-Wall, Curzon Hall Red Brick, Residential Balconies, Industrial Garments)
+  // 6. High-Definition Building Facade Generator (with Sky Reflections, Balcony Grills, AC Units & Glowing Bangla Signboards)
   const createBuildingFacadeTex = (b: Building) => {
     return createConfiguredCanvasTexture(
       renderer,
@@ -286,63 +406,78 @@ function createDhakaProceduralTextures(renderer: THREE.WebGLRenderer) {
         ctx.fillStyle = b.baseColor;
         ctx.fillRect(0, 0, w, h);
 
-        // Subtle vertical concrete/brick architectural panelling
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.18)';
+        // Subtle architectural concrete/brick mortar texture
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.2)';
         for (let x = 0; x < w; x += 32) {
           ctx.fillRect(x, 0, 4, h);
         }
 
-        // Floor slab horizontal bands
         const floors = Math.max(4, Math.min(10, Math.round(b.height3D / 14)));
         const floorH = (h - 68) / floors;
 
         for (let f = 0; f < floors; f++) {
           const fy = 52 + f * floorH;
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
-          ctx.fillRect(0, fy, w, 5);
+          // Floor slab cornice ledge
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.42)';
+          ctx.fillRect(0, fy, w, 6);
 
           const cols = 8;
           const colW = (w - 32) / cols;
           for (let c = 0; c < cols; c++) {
-            const wx = 16 + c * colW + 5;
+            const wx = 16 + c * colW + 4;
             const wy = fy + 9;
-            const ww = colW - 10;
-            const wh = Math.max(10, floorH - 16);
+            const ww = colW - 8;
+            const wh = Math.max(10, floorH - 15);
 
             const seed = (f * 13 + c * 7 + b.x) % 11;
             const isLit = seed < 7;
 
             if (b.interiorType === 'NIGHTCLUB') {
-              ctx.fillStyle =
-                seed % 2 === 0 ? '#f43f5e' : '#a855f7';
+              const nGrad = ctx.createLinearGradient(wx, wy, wx, wy + wh);
+              nGrad.addColorStop(0, seed % 2 === 0 ? '#f43f5e' : '#a855f7');
+              nGrad.addColorStop(1, '#3b0764');
+              ctx.fillStyle = nGrad;
             } else if (b.interiorType === 'OFFICE_COURT' && b.baseColor === '#991b1b') {
-              // Curzon Hall / Supreme Court arched heritage windows
               ctx.fillStyle = '#fef3c7';
+            } else if (isLit) {
+              const wGrad = ctx.createLinearGradient(wx, wy, wx + ww, wy + wh);
+              wGrad.addColorStop(0, '#e0f2fe');
+              wGrad.addColorStop(0.5, '#7dd3fc');
+              wGrad.addColorStop(1, '#0284c7');
+              ctx.fillStyle = wGrad;
             } else {
-              ctx.fillStyle = isLit ? '#bae6fd' : '#1e293b';
+              ctx.fillStyle = '#0f172a';
             }
 
             ctx.fillRect(wx, wy, ww, wh);
 
-            // Window mullion & AC unit detail
+            // Dhaka Balcony Grill / Window Mullion Bars
             ctx.strokeStyle = b.accentColor || '#e2e8f0';
-            ctx.lineWidth = 1.5;
+            ctx.lineWidth = 1.6;
             ctx.strokeRect(wx, wy, ww, wh);
+            ctx.beginPath();
+            ctx.moveTo(wx + ww / 2, wy);
+            ctx.lineTo(wx + ww / 2, wy + wh);
+            ctx.stroke();
 
-            if (seed === 2) {
-              // Outdoor split AC compressor box common on Dhaka buildings
-              ctx.fillStyle = '#cbd5e1';
-              ctx.fillRect(wx + ww - 10, wy + wh - 8, 10, 8);
+            if (seed === 2 || seed === 5) {
+              // Split AC outdoor compressor unit with fan louvre
+              ctx.fillStyle = '#e2e8f0';
+              ctx.fillRect(wx + ww - 12, wy + wh - 9, 11, 8);
+              ctx.fillStyle = '#334155';
+              ctx.beginPath();
+              ctx.arc(wx + ww - 6.5, wy + wh - 5, 3, 0, Math.PI * 2);
+              ctx.fill();
             }
           }
         }
 
         // Top Illuminated Bangla Signboard Fascia Band
-        ctx.fillStyle = '#0f172a';
-        ctx.fillRect(8, 6, w - 16, 40);
+        ctx.fillStyle = '#090d16';
+        ctx.fillRect(6, 5, w - 12, 42);
         ctx.strokeStyle = b.neonColor || '#facc15';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(8, 6, w - 16, 40);
+        ctx.lineWidth = 3.5;
+        ctx.strokeRect(6, 5, w - 12, 42);
 
         ctx.fillStyle = '#fef08a';
         ctx.font = '900 18px "Plus Jakarta Sans", sans-serif';
@@ -358,7 +493,11 @@ function createDhakaProceduralTextures(renderer: THREE.WebGLRenderer) {
   return {
     roadHoriz: makeRoadTex(true),
     roadVert: makeRoadTex(false),
+    asphaltBumpTex,
     sidewalkTex,
+    sidewalkBumpTex,
+    buildingBumpTex,
+    contactShadowTex,
     grassTex,
     waterTex,
     pitchTex,
@@ -900,7 +1039,7 @@ function createVehicle3DRig(v: VehicleState): Vehicle3DRig {
     cabinGlass.position.set(0, 22.8, -3);
     root.add(cabinGlass);
 
-    // Headlights & Taillights
+    // Headlights & Volumetric Beam Cones
     const hlL = new THREE.Mesh(new THREE.BoxGeometry(6, 3.5, 2), headlightMat);
     hlL.position.set(-carW / 2 + 6, 12, carL / 2 + 0.6);
     const hlR = hlL.clone();
@@ -909,7 +1048,20 @@ function createVehicle3DRig(v: VehicleState): Vehicle3DRig {
     tlL.position.set(-carW / 2 + 6, 12, -carL / 2 - 0.6);
     const tlR = tlL.clone();
     tlR.position.x = carW / 2 - 6;
-    root.add(hlL, hlR, tlL, tlR);
+
+    const beamMat = new THREE.MeshBasicMaterial({
+      color: '#fef08a',
+      transparent: true,
+      opacity: 0.14,
+      depthWrite: false,
+    });
+    const beamCone = new THREE.Mesh(
+      new THREE.ConeGeometry(16, 52, 12, 1, true),
+      beamMat
+    );
+    beamCone.rotation.x = -Math.PI / 2;
+    beamCone.position.set(0, 7, carL / 2 + 28);
+    root.add(hlL, hlR, tlL, tlR, beamCone);
 
     let sirenRed: THREE.Mesh | undefined;
     let sirenBlue: THREE.Mesh | undefined;
@@ -1041,10 +1193,12 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
     // =========================================================================
     const waterPlane = new THREE.Mesh(
       new THREE.PlaneGeometry(WORLD_WIDTH + 3000, WORLD_HEIGHT + 3000),
-      new THREE.MeshStandardMaterial({
+      new THREE.MeshPhysicalMaterial({
         map: textures.waterTex,
-        roughness: 0.2,
-        metalness: 0.15,
+        roughness: 0.14,
+        metalness: 0.18,
+        clearcoat: 0.85,
+        clearcoatRoughness: 0.1,
       })
     );
     waterPlane.rotation.x = -Math.PI / 2;
@@ -1055,7 +1209,9 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
       new THREE.BoxGeometry(WORLD_WIDTH - 140, 4, WORLD_HEIGHT - 120),
       new THREE.MeshStandardMaterial({
         map: textures.sidewalkTex,
-        roughness: 0.82,
+        bumpMap: textures.sidewalkBumpTex,
+        bumpScale: 0.9,
+        roughness: 0.78,
       })
     );
     sidewalkSlab.position.set(
@@ -1078,10 +1234,11 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
           roughness: 0.85,
         });
       } else if (tz.type === 'OCEAN_SURF') {
-        mat = new THREE.MeshStandardMaterial({
+        mat = new THREE.MeshPhysicalMaterial({
           map: textures.waterTex,
-          roughness: 0.18,
+          roughness: 0.12,
           metalness: 0.2,
+          clearcoat: 0.9,
         });
         yPos = 1.6;
       } else if (tz.type === 'SAND_BEACH') {
@@ -1092,7 +1249,9 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
       } else if (tz.type === 'PLAZA_TILES') {
         mat = new THREE.MeshStandardMaterial({
           color: '#fed7aa',
-          roughness: 0.65,
+          bumpMap: textures.sidewalkBumpTex,
+          bumpScale: 0.6,
+          roughness: 0.62,
         });
       } else {
         mat = new THREE.MeshStandardMaterial({
@@ -1118,10 +1277,11 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
         2.5,
         40
       ),
-      new THREE.MeshStandardMaterial({
+      new THREE.MeshPhysicalMaterial({
         map: textures.waterTex,
-        roughness: 0.12,
+        roughness: 0.1,
         metalness: 0.25,
+        clearcoat: 0.95,
       })
     );
     lakeDisc.position.set(PARK_POND_CIRCLE.x, 2.5, PARK_POND_CIRCLE.y);
@@ -1171,7 +1331,10 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
         new THREE.BoxGeometry(r.w, 1.4, r.h),
         new THREE.MeshStandardMaterial({
           map: tex,
-          roughness: 0.78,
+          bumpMap: textures.asphaltBumpTex,
+          bumpScale: 1.25,
+          roughness: 0.62,
+          metalness: 0.12,
         })
       );
       roadMesh.position.set(r.x + r.w / 2, 2.5, r.y + r.h / 2);
@@ -1663,14 +1826,18 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
           ],
         });
       } else {
-        // Solid Architectural Landmark Building
+        // Solid Architectural Landmark Building (supports transparent X-Ray fade if camera ray is blocked)
         const roofMat = new THREE.MeshStandardMaterial({
           color: b.roofColor || '#e2e8f0',
           roughness: 0.6,
+          transparent: true,
+          opacity: 1,
         });
         const wallMat = new THREE.MeshStandardMaterial({
           map: facadeTex,
           roughness: 0.5,
+          transparent: true,
+          opacity: 1,
         });
         const blockMesh = new THREE.Mesh(
           new THREE.BoxGeometry(b.w, wallH, b.h),
@@ -1680,6 +1847,12 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
         blockMesh.castShadow = true;
         blockMesh.receiveShadow = true;
         bGroup.add(blockMesh);
+
+        buildingRoofs.push({
+          building: b,
+          roofMesh: blockMesh,
+          wallMeshes: [blockMesh],
+        });
       }
 
       // Rooftop Water Tank & Solar Panel Details (authentic Dhaka rooftop skyline)
@@ -1689,6 +1862,42 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
       );
       waterTank.position.set(b.x + b.w - 45, wallH + 14, b.y + 42);
       bGroup.add(waterTank);
+
+      // Floating 3D Sky Beacon above Major Landmarks so players in Street TPS View can easily navigate Dhaka
+      if (b.enterable || b.interiorType) {
+        const beaconTex = createConfiguredCanvasTexture(
+          renderer,
+          384,
+          72,
+          (ctx, cw, ch) => {
+            ctx.fillStyle = 'rgba(9, 13, 26, 0.88)';
+            ctx.strokeStyle = b.neonColor || '#38bdf8';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.roundRect(6, 6, cw - 12, ch - 12, 16);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#fef08a';
+            ctx.font = '900 20px "Plus Jakarta Sans", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const shortTitle = b.name.split('(')[0].trim().slice(0, 26);
+            ctx.fillText(`📍 ${shortTitle}`, cw / 2, ch / 2);
+          }
+        );
+        const beaconSprite = new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            map: beaconTex,
+            transparent: true,
+            depthTest: false,
+          })
+        );
+        beaconSprite.position.set(b.x + b.w / 2, wallH + 46, b.y + b.h / 2);
+        beaconSprite.scale.set(108, 21, 1);
+        beaconSprite.renderOrder = 15;
+        bGroup.add(beaconSprite);
+      }
 
       scene.add(bGroup);
     }
@@ -1778,7 +1987,8 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
       scene.add(tGroup);
     }
 
-    // Street Lamps
+    // Street Lamps (with dynamic night glow halos)
+    const streetLampBulbs: THREE.Mesh[] = [];
     for (const lamp of STREET_LAMPS) {
       const lGroup = new THREE.Group();
       lGroup.position.set(lamp.x, 2, lamp.y);
@@ -1788,10 +1998,11 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
       );
       pole.position.y = 24;
       const bulb = new THREE.Mesh(
-        new THREE.SphereGeometry(4, 10, 10),
+        new THREE.SphereGeometry(4.5, 10, 10),
         new THREE.MeshBasicMaterial({ color: lamp.color })
       );
       bulb.position.y = 49;
+      streetLampBulbs.push(bulb);
       lGroup.add(pole, bulb);
       scene.add(lGroup);
     }
@@ -1809,7 +2020,7 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
     scene.add(footballMesh);
 
     // =========================================================================
-    // 7. DYNAMIC 3D RIGS FOR PLAYER, 46+ NPCs & ALL VEHICLES
+    // 7. DYNAMIC 3D RIGS FOR PLAYER, 46+ NPCs, VEHICLES, POPUPS & PARTICLES
     // =========================================================================
     const playerRig = createArticulatedCharacterRig(renderer, {
       primaryColor: '#10b981',
@@ -1841,10 +2052,84 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
       vehicleRigs.set(v.id, vRig);
     }
 
+    // 3D Pool for Floating Damage, Money & Mission Popups (w.floatingDamages)
+    const floatingPopupPool: Array<{
+      sprite: THREE.Sprite;
+      canvas: HTMLCanvasElement;
+      tex: THREE.CanvasTexture;
+      lastText: string;
+      lastColor: string;
+    }> = [];
+    for (let i = 0; i < 14; i++) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 320;
+      canvas.height = 64;
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const mat = new THREE.SpriteMaterial({
+        map: tex,
+        transparent: true,
+        depthTest: false,
+      });
+      const sprite = new THREE.Sprite(mat);
+      sprite.scale.set(52, 10.5, 1);
+      sprite.renderOrder = 40;
+      sprite.visible = false;
+      scene.add(sprite);
+      floatingPopupPool.push({
+        sprite,
+        canvas,
+        tex,
+        lastText: '',
+        lastColor: '',
+      });
+    }
+
+    // 3D Pool for Combat Sparks, Sprint Dust & Impact Particles (w.particles)
+    const particleGeo = new THREE.SphereGeometry(1, 6, 6);
+    const particleMeshPool: THREE.Mesh[] = [];
+    for (let i = 0; i < 42; i++) {
+      const pm = new THREE.Mesh(
+        particleGeo,
+        new THREE.MeshBasicMaterial({
+          color: '#fbbf24',
+          transparent: true,
+          opacity: 0.9,
+        })
+      );
+      pm.visible = false;
+      scene.add(pm);
+      particleMeshPool.push(pm);
+    }
+
+    // 3D Expanding Combat / Jump Landing Shockwave Ring Effect
+    const shockwaveRing = new THREE.Mesh(
+      new THREE.RingGeometry(8, 14, 32),
+      new THREE.MeshBasicMaterial({
+        color: '#38bdf8',
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+      })
+    );
+    shockwaveRing.rotation.x = -Math.PI / 2;
+    shockwaveRing.position.y = 3.4;
+    shockwaveRing.visible = false;
+    scene.add(shockwaveRing);
+    let shockwaveLife = 0;
+    let lastPunchTriggerTime = 0;
+
+    // Pre-compile shaders for butter-smooth 60 FPS without first-frame stutter
+    if (!isSoftwareGl) {
+      try {
+        renderer.compile(scene, camera);
+      } catch {}
+    }
+
     // =========================================================================
-    // 8. POINTER / TOUCH 360° FREE-LOOK HANDLERS (GTA / FREE FIRE RIGHT-THUMB SWIPE)
+    // 8. POINTER / TOUCH 360° FREE-LOOK HANDLERS WITH INERTIA & SENSITIVITY
     // =========================================================================
-    // Initialize camera yaw to match player's initial forward direction
     if (worldRef.current.camera.yaw3D === undefined) {
       worldRef.current.camera.yaw3D = worldRef.current.player.angle || Math.PI / 2;
     }
@@ -1855,10 +2140,14 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
     orbitPitchOffsetRef.current = worldRef.current.camera.pitch3D;
 
     let lastLookTouchTime = 0;
+    let yawInertiaVel = 0;
+    let pitchInertiaVel = 0;
 
     const onPointerDown = (e: PointerEvent) => {
       dragPointerIdRef.current = e.pointerId;
       lastDragPosRef.current = { x: e.clientX, y: e.clientY };
+      yawInertiaVel = 0;
+      pitchInertiaVel = 0;
       lastLookTouchTime = performance.now();
     };
     const onPointerMove = (e: PointerEvent) => {
@@ -1868,16 +2157,22 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
       lastDragPosRef.current = { x: e.clientX, y: e.clientY };
       lastLookTouchTime = performance.now();
 
-      // Transform screen drag delta correctly whether portrait-rotated or standard landscape
       const dx = isRotatedLandscape ? rawDy : rawDx;
       const dy = isRotatedLandscape ? -rawDx : rawDy;
 
-      const sensitivity = 0.0058;
-      orbitYawOffsetRef.current += dx * sensitivity;
+      const userSens = worldRef.current.camera.sensitivity3D ?? 1.0;
+      const yawDelta = dx * 0.0062 * userSens;
+      const pitchDelta = dy * 0.0044 * userSens;
+
+      orbitYawOffsetRef.current += yawDelta;
       orbitPitchOffsetRef.current = Math.max(
-        -0.22,
-        Math.min(0.68, orbitPitchOffsetRef.current + dy * 0.0042)
+        -0.24,
+        Math.min(0.7, orbitPitchOffsetRef.current + pitchDelta)
       );
+
+      // Store inertia velocity for silky glide after finger release
+      yawInertiaVel = yawDelta * 0.48;
+      pitchInertiaVel = pitchDelta * 0.42;
 
       worldRef.current.camera.yaw3D = orbitYawOffsetRef.current;
       worldRef.current.camera.pitch3D = orbitPitchOffsetRef.current;
@@ -1894,20 +2189,63 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('pointercancel', onPointerUp);
 
-    // 3D Atmospheric Sky Dome + Glowing Sun Disc for horizon-looking TPS view
+    // 3D Atmospheric Sky Dome (supports DAY, SUNSET, and NIGHT presets)
     const skyCanvas = document.createElement('canvas');
     skyCanvas.width = 64;
     skyCanvas.height = 256;
     const skyCtx = skyCanvas.getContext('2d')!;
-    const skyGrad = skyCtx.createLinearGradient(0, 0, 0, 256);
-    skyGrad.addColorStop(0, '#0284c7');
-    skyGrad.addColorStop(0.48, '#38bdf8');
-    skyGrad.addColorStop(0.82, '#bae6fd');
-    skyGrad.addColorStop(1, '#fef3c7');
-    skyCtx.fillStyle = skyGrad;
-    skyCtx.fillRect(0, 0, 64, 256);
     const skyTex = new THREE.CanvasTexture(skyCanvas);
     skyTex.colorSpace = THREE.SRGBColorSpace;
+
+    let currentSkyMode: 'DAY' | 'SUNSET' | 'NIGHT' | '' = '';
+    const applyWeatherModeToSky = (mode: 'DAY' | 'SUNSET' | 'NIGHT') => {
+      if (currentSkyMode === mode) return;
+      currentSkyMode = mode;
+      const skyGrad = skyCtx.createLinearGradient(0, 0, 0, 256);
+      if (mode === 'SUNSET') {
+        skyGrad.addColorStop(0, '#311042');
+        skyGrad.addColorStop(0.45, '#be185d');
+        skyGrad.addColorStop(0.78, '#f97316');
+        skyGrad.addColorStop(1, '#fde047');
+        scene.fog = new THREE.FogExp2('#fb923c', 0.00022);
+        hemiLight.color.set('#fed7aa');
+        hemiLight.groundColor.set('#311042');
+        hemiLight.intensity = 0.78;
+        sunLight.color.set('#fdba74');
+        sunLight.intensity = 1.65;
+      } else if (mode === 'NIGHT') {
+        skyGrad.addColorStop(0, '#020617');
+        skyGrad.addColorStop(0.55, '#0f172a');
+        skyGrad.addColorStop(0.85, '#1e1b4b');
+        skyGrad.addColorStop(1, '#312e81');
+        scene.fog = new THREE.FogExp2('#0f172a', 0.00026);
+        hemiLight.color.set('#38bdf8');
+        hemiLight.groundColor.set('#090d16');
+        hemiLight.intensity = 0.55;
+        sunLight.color.set('#93c5fd');
+        sunLight.intensity = 0.75;
+      } else {
+        skyGrad.addColorStop(0, '#0284c7');
+        skyGrad.addColorStop(0.48, '#38bdf8');
+        skyGrad.addColorStop(0.82, '#bae6fd');
+        skyGrad.addColorStop(1, '#fef3c7');
+        scene.fog = new THREE.FogExp2('#bae6fd', 0.00022);
+        hemiLight.color.set('#e0f2fe');
+        hemiLight.groundColor.set('#334155');
+        hemiLight.intensity = 0.88;
+        sunLight.color.set('#fffbeb');
+        sunLight.intensity = 1.85;
+      }
+      skyCtx.fillStyle = skyGrad;
+      skyCtx.fillRect(0, 0, 64, 256);
+      skyTex.needsUpdate = true;
+
+      for (const bulb of streetLampBulbs) {
+        bulb.scale.setScalar(mode === 'NIGHT' ? 1.55 : mode === 'SUNSET' ? 1.25 : 0.9);
+      }
+    };
+    applyWeatherModeToSky(worldRef.current.camera.weatherMode || 'DAY');
+
     const skyDome = new THREE.Mesh(
       new THREE.SphereGeometry(5200, 24, 16),
       new THREE.MeshBasicMaterial({
@@ -1938,6 +2276,34 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
     let isDisposed = false;
     const smoothCamPos = new THREE.Vector3(2185, 65, 720);
     const smoothLookAt = new THREE.Vector3(2185, 34, 920);
+    const _desiredCamVec = new THREE.Vector3();
+    const _desiredLookVec = new THREE.Vector3();
+
+    // Helper: Does segment (x1,z1)->(x2,z2) pass through expanded rectangle [rx, rz, rw, rh]?
+    const segmentIntersectsRect2D = (
+      x1: number,
+      z1: number,
+      x2: number,
+      z2: number,
+      rx: number,
+      rz: number,
+      rw: number,
+      rh: number
+    ) => {
+      const minX = rx - 14;
+      const maxX = rx + rw + 14;
+      const minZ = rz - 14;
+      const maxZ = rz + rh + 14;
+      // Check 4 sample points along camera-to-player ray
+      for (const t of [0.2, 0.45, 0.7, 0.9]) {
+        const sx = x1 + (x2 - x1) * t;
+        const sz = z1 + (z2 - z1) * t;
+        if (sx >= minX && sx <= maxX && sz >= minZ && sz <= maxZ) {
+          return true;
+        }
+      }
+      return false;
+    };
 
     const updateCharacterPose = (
       rig: Character3DRig,
@@ -1953,12 +2319,10 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
       timeSec: number
     ) => {
       rig.root.position.set(x, 2.5 + jumpHeight, y);
-      // Convert 2D angle (atan2(dy, dx)) to Three.js yaw where +Z is local forward
       rig.bodyGroup.rotation.y = -angle + Math.PI / 2;
 
       const stride = Math.sin(walkCycle * 1.4) * 0.72;
       if (jumpHeight > 2) {
-        // Mid-air Free Fire / GTA Jump Pose
         rig.bodyGroup.position.y = 0;
         rig.leftLeg.rotation.x = -0.55;
         rig.rightLeg.rotation.x = 0.45;
@@ -2019,6 +2383,10 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
       setTimeout(poll, 4);
     };
 
+    let fpsFrameCount = 0;
+    let fpsLastSampleTime = performance.now();
+    let currentQualityMode: string = '';
+
     const tick: FrameRequestCallback = (now) => {
       if (isDisposed) return;
       const timeSec = now / 1000;
@@ -2026,29 +2394,124 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
       const p = w.player;
 
       w.camera.is3DMode = true;
+      applyWeatherModeToSky(w.camera.weatherMode || 'DAY');
+
+      // Live FPS Measurement & Dynamic Resolution Quality Preset Scaling
+      fpsFrameCount++;
+      if (now - fpsLastSampleTime >= 500) {
+        w.camera.liveFps = Math.min(
+          120,
+          Math.max(15, Math.round((fpsFrameCount * 1000) / (now - fpsLastSampleTime)))
+        );
+        fpsFrameCount = 0;
+        fpsLastSampleTime = now;
+      }
+
+      const desiredQuality = w.camera.qualityPreset || 'HD';
+      if (currentQualityMode !== desiredQuality && !isSoftwareGl) {
+        currentQualityMode = desiredQuality;
+        const baseDpr = window.devicePixelRatio || 1;
+        const targetDpr =
+          desiredQuality === 'PERFORMANCE'
+            ? 1.0
+            : desiredQuality === 'ULTRA_2K'
+              ? Math.min(baseDpr * 1.35, 2.25)
+              : Math.min(baseDpr, 1.65);
+        renderer.setPixelRatio(targetDpr);
+        handleResize();
+      }
+
+      // Smooth Touch-Look Inertia Glide when finger is lifted
+      if (
+        dragPointerIdRef.current === null &&
+        (Math.abs(yawInertiaVel) > 0.0001 || Math.abs(pitchInertiaVel) > 0.0001)
+      ) {
+        orbitYawOffsetRef.current += yawInertiaVel;
+        orbitPitchOffsetRef.current = Math.max(
+          -0.24,
+          Math.min(0.7, orbitPitchOffsetRef.current + pitchInertiaVel)
+        );
+        yawInertiaVel *= 0.86;
+        pitchInertiaVel *= 0.84;
+        w.camera.yaw3D = orbitYawOffsetRef.current;
+        w.camera.pitch3D = orbitPitchOffsetRef.current;
+      }
 
       // Animate water texture UV offset
       textures.waterTex.offset.x = (timeSec * 0.03) % 1;
       textures.waterTex.offset.y = (timeSec * 0.02) % 1;
 
-      // 1. Cutaway Roof Opacity when Player is inside or right next to an Enterable Building
+      // Trigger 3D Combat Shockwave Ring when Player punches
+      if (p.punchTimer > 0.16 && now - lastPunchTriggerTime > 200) {
+        lastPunchTriggerTime = now;
+        shockwaveLife = 1.0;
+        shockwaveRing.position.set(
+          p.x + Math.cos(p.angle) * 28,
+          4.0 + (p.jumpY || 0),
+          p.y + Math.sin(p.angle) * 28
+        );
+        shockwaveRing.scale.setScalar(0.5);
+        shockwaveRing.visible = true;
+      }
+      if (shockwaveLife > 0) {
+        shockwaveLife = Math.max(0, shockwaveLife - 0.075);
+        const sScale = 0.5 + (1 - shockwaveLife) * 2.8;
+        shockwaveRing.scale.setScalar(sScale);
+        (shockwaveRing.material as THREE.MeshBasicMaterial).opacity =
+          shockwaveLife * 0.78;
+        if (shockwaveLife <= 0.02) shockwaveRing.visible = false;
+      }
+
+      // 1. Smart Building & Wall X-Ray Occlusion when Player is inside OR when a building blocks the 3D TPS Camera!
       for (const item of buildingRoofs) {
         const b = item.building;
         const insideOrVeryNear =
-          p.x >= b.x - 45 &&
-          p.x <= b.x + b.w + 45 &&
-          p.y >= b.y - 45 &&
-          p.y <= b.y + b.h + 45;
-        const roofMat = item.roofMesh.material as THREE.MeshStandardMaterial;
-        const targetRoofOpacity = insideOrVeryNear ? 0.08 : 1.0;
-        roofMat.opacity += (targetRoofOpacity - roofMat.opacity) * 0.18;
-        item.roofMesh.visible = roofMat.opacity > 0.12;
+          p.x >= b.x - 42 &&
+          p.x <= b.x + b.w + 42 &&
+          p.y >= b.y - 42 &&
+          p.y <= b.y + b.h + 42;
+        const blocksCameraLine =
+          (w.camera.angleLevel || 1) <= 3 &&
+          segmentIntersectsRect2D(
+            smoothCamPos.x,
+            smoothCamPos.z,
+            p.x,
+            p.y,
+            b.x,
+            b.y,
+            b.w,
+            b.h
+          );
+
+        const shouldFade = insideOrVeryNear || blocksCameraLine;
+        const targetRoofOpacity = insideOrVeryNear
+          ? 0.05
+          : blocksCameraLine
+            ? 0.2
+            : 1.0;
+        const targetWallOpacity = shouldFade ? 0.22 : 1.0;
+
+        if (Array.isArray(item.roofMesh.material)) {
+          for (const m of item.roofMesh.material) {
+            const stdM = m as THREE.MeshStandardMaterial;
+            stdM.opacity += (targetWallOpacity - stdM.opacity) * 0.2;
+          }
+        } else {
+          const roofMat = item.roofMesh.material as THREE.MeshStandardMaterial;
+          roofMat.opacity += (targetRoofOpacity - roofMat.opacity) * 0.2;
+          item.roofMesh.visible = roofMat.opacity > 0.09;
+        }
+
+        if (item.wallMeshes.length > 0 && item.wallMeshes[0] !== item.roofMesh) {
+          const wallMat = item.wallMeshes[0]
+            .material as THREE.MeshStandardMaterial;
+          wallMat.opacity += (targetWallOpacity - wallMat.opacity) * 0.2;
+        }
       }
 
       // 2. Sync Player 3D Rig
       const playerOnFoot = !p.inVehicleId && !p.inTrain;
       playerRig.root.visible = playerOnFoot;
-      // Hide player's own overhead label in close Over-The-Shoulder TPS view (Level 1) so view is unobstructed like Free Fire
       playerRig.labelSprite.visible = (w.camera.angleLevel || 1) >= 2;
       if (playerOnFoot) {
         updateCharacterPose(
@@ -2099,8 +2562,7 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
         if (!visible) continue;
 
         const distToPlayer = Math.hypot(npc.x - p.x, npc.y - p.y);
-        // Hide far-away labels to keep 3D skyline crisp & fast
-        rig.labelSprite.visible = distToPlayer < 650;
+        rig.labelSprite.visible = distToPlayer < 680;
 
         updateCharacterPose(
           rig,
@@ -2197,6 +2659,65 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
         footballMesh.rotation.z -= w.football.vx * 0.003;
       }
 
+      // 6B. Sync 3D Floating Damage, Money & Mission Popups (w.floatingDamages)
+      for (let i = 0; i < floatingPopupPool.length; i++) {
+        const slot = floatingPopupPool[i];
+        const fd = w.floatingDamages[i];
+        if (!fd || fd.life <= 0) {
+          slot.sprite.visible = false;
+          continue;
+        }
+        slot.sprite.visible = true;
+        const riseY = 46 + (1.4 - Math.min(1.4, fd.life)) * 34;
+        slot.sprite.position.set(fd.x, riseY, fd.y + 38);
+        (slot.sprite.material as THREE.SpriteMaterial).opacity = Math.min(
+          1,
+          fd.life * 1.4
+        );
+
+        if (slot.lastText !== fd.text || slot.lastColor !== fd.color) {
+          slot.lastText = fd.text;
+          slot.lastColor = fd.color;
+          const ctx = slot.canvas.getContext('2d')!;
+          ctx.clearRect(0, 0, slot.canvas.width, slot.canvas.height);
+          ctx.fillStyle = 'rgba(9, 13, 28, 0.88)';
+          ctx.strokeStyle = fd.color || '#facc15';
+          ctx.lineWidth = 3.5;
+          ctx.beginPath();
+          ctx.roundRect(8, 8, slot.canvas.width - 16, slot.canvas.height - 16, 14);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = fd.color || '#facc15';
+          ctx.font = '900 22px "Plus Jakarta Sans", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(
+            fd.text.slice(0, 26),
+            slot.canvas.width / 2,
+            slot.canvas.height / 2
+          );
+          slot.tex.needsUpdate = true;
+        }
+      }
+
+      // 6C. Sync 3D Combat Sparks & Sprint Dust Particles (w.particles)
+      for (let i = 0; i < particleMeshPool.length; i++) {
+        const pm = particleMeshPool[i];
+        const pt = w.particles[i];
+        if (!pt || pt.life <= 0) {
+          pm.visible = false;
+          continue;
+        }
+        pm.visible = true;
+        const lifeRatio = Math.max(0.1, pt.life / Math.max(0.1, pt.maxLife));
+        pm.position.set(pt.x, 6 + (1 - lifeRatio) * 18, pt.y);
+        pm.scale.setScalar(Math.max(1.2, pt.size * 0.65 * lifeRatio));
+        const pMat = pm.material as THREE.MeshBasicMaterial;
+        pMat.color.set(pt.color || '#fbbf24');
+        pMat.opacity = Math.min(1, pt.alpha * lifeRatio);
+      }
+
       // =======================================================================
       // 7. GTA / FREE FIRE 3D CAMERA SYSTEM (🎥 ভিউ ১ থেকে ৫)
       // =======================================================================
@@ -2205,7 +2726,6 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
       const focusZ = Number.isFinite(p.y) ? p.y : 825;
       const jumpOffset = p.jumpY || 0;
 
-      // Active vehicle or train auto-aligns camera yaw smoothly behind vehicle when driving
       let activeVehicleSpeed = 0;
       if (p.inVehicleId) {
         const activeCar = w.vehicles.find((v) => v.id === p.inVehicleId);
@@ -2243,7 +2763,6 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
       const rightX = -Math.sin(aimYaw);
       const rightZ = Math.cos(aimYaw);
 
-      // Dynamic FOV boost when sprinting or driving fast (GTA / Free Fire speed feel)
       const isSprinting = Boolean(
         p.isRunning && Math.hypot(p.vx, p.vy) > 180 && !p.inVehicleId
       );
@@ -2258,12 +2777,6 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
         camera.updateProjectionMatrix();
       }
 
-      // 5 Camera View Presets:
-      // Level 1: Authentic Free Fire / GTA Over-The-Shoulder Third-Person (TPS) Street View
-      // Level 2: GTA Action Wide Chase Camera (ideal for vehicles & combat)
-      // Level 3: Tactical High Chase View
-      // Level 4: Drone 3D City View
-      // Level 5: Bird's-Eye Dhaka 3D Map Overview
       const camPresets: Record<
         1 | 2 | 3 | 4 | 5,
         {
@@ -2317,7 +2830,6 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
       const shakeY =
         w.camera.shake > 0 ? (Math.random() - 0.5) * w.camera.shake * 0.6 : 0;
 
-      // Camera positioned behind player along -fwd + right shoulder offset
       const desiredCamX =
         focusX -
         fwdX * cfg.backDist +
@@ -2336,12 +2848,9 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
           shakeY
       );
 
-      smoothCamPos.lerp(
-        new THREE.Vector3(desiredCamX, desiredCamY, desiredCamZ),
-        lvl <= 2 ? 0.24 : 0.16
-      );
+      _desiredCamVec.set(desiredCamX, desiredCamY, desiredCamZ);
+      smoothCamPos.lerp(_desiredCamVec, lvl <= 2 ? 0.24 : 0.16);
 
-      // Look target ahead of player along +fwd so buildings, road & sky fill the viewport
       const targetLookX =
         focusX + fwdX * cfg.lookDist + rightX * (cfg.shoulderOffset * 0.45);
       const targetLookZ =
@@ -2351,15 +2860,12 @@ export const Three3DWorld: React.FC<Three3DWorldProps> = ({
         cfg.lookBaseY + jumpOffset * 0.4 - aimPitch * (lvl <= 2 ? 75 : 40)
       );
 
-      smoothLookAt.lerp(
-        new THREE.Vector3(targetLookX, targetLookY, targetLookZ),
-        lvl <= 2 ? 0.28 : 0.2
-      );
+      _desiredLookVec.set(targetLookX, targetLookY, targetLookZ);
+      smoothLookAt.lerp(_desiredLookVec, lvl <= 2 ? 0.28 : 0.2);
 
       camera.position.copy(smoothCamPos);
       camera.lookAt(smoothLookAt);
 
-      // Keep directional shadow frustum centered near player
       sunLight.position.set(focusX + 900, 1300, focusZ + 700);
       sunLight.target.position.set(focusX, 0, focusZ);
       sunLight.target.updateMatrixWorld();

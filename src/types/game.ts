@@ -381,6 +381,10 @@ export interface WorldSimulationRef {
     is3DMode?: boolean;
     yaw3D?: number;
     pitch3D?: number;
+    weatherMode?: 'DAY' | 'SUNSET' | 'NIGHT';
+    sensitivity3D?: number;
+    qualityPreset?: 'PERFORMANCE' | 'HD' | 'ULTRA_2K';
+    liveFps?: number;
   };
   hitstopTimer: number;
   mobAlertTimer: number;
