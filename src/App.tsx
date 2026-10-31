@@ -34,8 +34,18 @@ import type {
   VehicleState,
 } from './types/game';
 import { Canvas2DWorld } from './components/Canvas2DWorld';
+import { Three3DWorld } from './components/Three3DWorld';
 import { MAX_VOICE_HEARING_DIST, sound } from './utils/sound';
-import { TRAIN_TRACK_Y, resolveCircleBuildingCollision } from './data/cityMap';
+import {
+  BUILDINGS,
+  CENTRAL_PARK_RECT,
+  PLAYER_HOME_RECT,
+  TRAIN_LOOP_RECT,
+  TRAIN_TRACK_Y,
+  WORLD_HEIGHT,
+  WORLD_WIDTH,
+  resolveCircleBuildingCollision,
+} from './data/cityMap';
 import {
   MICHIL_SLOGANS,
   NPC_DIALOGUE_BANKS,
@@ -68,6 +78,8 @@ const createInitialWorld = (): WorldSimulationRef => ({
     popularity: 65,
     money: 2500,
     isRunning: false,
+    jumpY: 0,
+    jumpVy: 0,
   },
   vehicles: createInitialVehicles(),
   npcs: createInitialCommunityNPCs(),
@@ -107,6 +119,9 @@ const createInitialWorld = (): WorldSimulationRef => ({
     shake: 0,
     angleLevel: 1,
     zoom: 1.0,
+    is3DMode: true,
+    yaw3D: Math.PI / 2,
+    pitch3D: 0.24,
   },
   hitstopTimer: 0,
   mobAlertTimer: 0,
@@ -159,13 +174,14 @@ export default function App() {
   const [aliveNpcCount, setAliveNpcCount] = useState<number>(15);
   const [trainStatus, setTrainStatus] = useState<string>('বাপের সিটি এক্সপ্রেস চলছে');
   const [communityBannerText, setCommunityBannerText] = useState<string>(
-    'বাপের সিটিতে স্বাগতম! আশপাশে থাকা মানুষের কথা ও আওয়াজ শুনুন, আর বাটন চেপে আরামে গাড়ি, বাস, রিকশা ও বাইক চালান!'
+    'বাপের সিটি ৩ডি (3D Dhaka Mode)-তে স্বাগতম! আশপাশে থাকা মানুষের কথা ও আওয়াজ শুনুন, আর বাটন চেপে আরামে গাড়ি, বাস, রিকশা ও বাইক চালান!'
   );
   // Default chat drawer closed on compact mobile screens so bottom controls never get crowded
   const [chatDrawerOpen, setChatDrawerOpen] = useState<boolean>(false);
   const [missionDrawerOpen, setMissionDrawerOpen] = useState<boolean>(false);
   const [isRunningMode, setIsRunningMode] = useState<boolean>(false);
   const [cameraAngleLevel, setCameraAngleLevel] = useState<1 | 2 | 3 | 4 | 5>(1);
+  const [is3DMode, setIs3DMode] = useState<boolean>(true);
   const [currentInteriorZone, setCurrentInteriorZone] = useState<
     | 'PLAYER_HOME'
     | 'GARMENTS'
@@ -267,6 +283,20 @@ export default function App() {
     []
   );
 
+  const [compassDeg, setCompassDeg] = useState<number>(180);
+
+  // Free Fire / GTA 3D Jump Action (লাফানো বাটন)
+  const handlePlayerJump = useCallback(() => {
+    if (gameState !== 'PLAYING') return;
+    const p = worldRef.current.player;
+    if (p.inVehicleId || p.inTrain) return;
+    if ((p.jumpY ?? 0) <= 1) {
+      p.jumpVy = 215;
+      p.jumpY = 1.5;
+      sound.playPunchSwing?.(0);
+    }
+  }, [gameState]);
+
   // Toggle between Normal Walk Mode (নরমাল হাঁটা) and Fast Run Mode (দ্রুত দৌড়)
   const handleToggleRunMode = useCallback(() => {
     setIsRunningMode((prev) => {
@@ -274,23 +304,23 @@ export default function App() {
       worldRef.current.player.isRunning = next;
       setCommunityBannerText(
         next
-          ? '🏃 রান মোড চালু হয়েছে! এখন জয়স্টিক দিয়ে দ্রুত দৌড়াতে পারবেন।'
-          : '🚶 নরমাল হাঁটা মোড চালু হয়েছে! এখন জয়স্টিক দিয়ে স্বাভাবিকভাবে হাঁটতে পারবেন।'
+          ? '🏃 স্প্রিন্ট (Sprint) চালু হয়েছে! এখন জয়স্টিক দিয়ে Free Fire / GTA-র মতো দ্রুত দৌড়াতে পারবেন।'
+          : '🚶 নরমাল হাঁটা মোড চালু হয়েছে!'
       );
       return next;
     });
   }, []);
 
-  // Set or Cycle 5 Camera Angles (১ থেকে ৫ পর্যন্ত উপর থেকে ম্যাপ দেখার ভিউ মোড)
+  // Set or Cycle 5 Camera Angles (১ থেকে ৫ পর্যন্ত ক্যামেরা ভিউ মোড)
   const handleSetCameraAngle = useCallback((level: 1 | 2 | 3 | 4 | 5) => {
     setCameraAngleLevel(level);
     worldRef.current.camera.angleLevel = level;
     const labels: Record<1 | 2 | 3 | 4 | 5, string> = {
-      1: '🎥 ক্যামেরা অ্যাঙ্গেল ১/৫: জেনারেল ভিউ (সাধারণ ক্লোজ ভিউ)',
-      2: '🎥 ক্যামেরা অ্যাঙ্গেল ২/৫: মিডিয়াম ভিউ (একটু উপর থেকে ম্যাপ দেখা যাচ্ছে)',
-      3: '🎥 ক্যামেরা অ্যাঙ্গেল ৩/৫: ড্রোন ভিউ (মাঝারি উচ্চতা থেকে শহর দেখা যাচ্ছে)',
-      4: '🎥 ক্যামেরা অ্যাঙ্গেল ৪/৫: হাই ভিউ (অনেক উপর থেকে বড় এলাকা দেখা যাচ্ছে)',
-      5: '🎥 ক্যামেরা অ্যাঙ্গেল ৫/৫: ফুল ম্যাপ ভিউ (সবচেয়ে উপর থেকে চারপাশ দেখা যাচ্ছে)',
+      1: '🎥 ভিউ ১/৫: GTA / Free Fire থার্ড-পারসন শোল্ডার ভিউ (TPS Street View)',
+      2: '🎥 ভিউ ২/৫: GTA ওয়াইড অ্যাকশন ও ড্রাইভিং চেজ ক্যামেরা',
+      3: '🎥 ভিউ ৩/৫: ট্যাকটিক্যাল থ্রিডি সিটি ভিউ',
+      4: '🎥 ভিউ ৪/৫: হেলিকপ্টার হাই সিটি ভিউ',
+      5: '🎥 ভিউ ৫/৫: গুগল ম্যাপস বার্ডস-আই ফুল ম্যাপ ভিউ',
     };
     setCommunityBannerText(labels[level]);
   }, []);
@@ -300,11 +330,11 @@ export default function App() {
       const next = ((prev % 5) + 1) as 1 | 2 | 3 | 4 | 5;
       worldRef.current.camera.angleLevel = next;
       const labels: Record<1 | 2 | 3 | 4 | 5, string> = {
-        1: '🎥 ক্যামেরা অ্যাঙ্গেল ১/৫: জেনারেল ভিউ (সাধারণ ক্লোজ ভিউ)',
-        2: '🎥 ক্যামেরা অ্যাঙ্গেল ২/৫: মিডিয়াম ভিউ (একটু উপর থেকে ম্যাপ দেখা যাচ্ছে)',
-        3: '🎥 ক্যামেরা অ্যাঙ্গেল ৩/৫: ড্রোন ভিউ (মাঝারি উচ্চতা থেকে শহর দেখা যাচ্ছে)',
-        4: '🎥 ক্যামেরা অ্যাঙ্গেল ৪/৫: হাই ভিউ (অনেক উপর থেকে বড় এলাকা দেখা যাচ্ছে)',
-        5: '🎥 ক্যামেরা অ্যাঙ্গেল ৫/৫: ফুল ম্যাপ ভিউ (সবচেয়ে উপর থেকে চারপাশ দেখা যাচ্ছে)',
+        1: '🎥 ভিউ ১/৫: GTA / Free Fire থার্ড-পারসন শোল্ডার ভিউ (TPS Street View)',
+        2: '🎥 ভিউ ২/৫: GTA ওয়াইড অ্যাকশন ও ড্রাইভিং চেজ ক্যামেরা',
+        3: '🎥 ভিউ ৩/৫: ট্যাকটিক্যাল থ্রিডি সিটি ভিউ',
+        4: '🎥 ভিউ ৪/৫: হেলিকপ্টার হাই সিটি ভিউ',
+        5: '🎥 ভিউ ৫/৫: গুগল ম্যাপস বার্ডস-আই ফুল ম্যাপ ভিউ',
       };
       setCommunityBannerText(labels[next]);
       return next;
@@ -319,6 +349,10 @@ export default function App() {
     setPopularity(Math.round(w.player.popularity || 50));
     setPlayerMoney(Math.round(w.player.money ?? 2500));
     setMobAlertSeconds(Math.ceil(w.mobAlertTimer || 0));
+
+    const yaw = w.camera.yaw3D ?? w.player.angle ?? Math.PI / 2;
+    const deg = (((Math.round((yaw * 180) / Math.PI) + 90) % 360) + 360) % 360;
+    setCompassDeg(deg);
 
     if (px >= 1850 && px <= 2520 && py >= 700 && py <= 915) {
       setCurrentInteriorZone('PLAYER_HOME');
@@ -1278,6 +1312,9 @@ export default function App() {
       } else if (key === ' ') {
         e.preventDefault();
         handlePlayerAttack();
+      } else if (key === 'j') {
+        e.preventDefault();
+        handlePlayerJump();
       } else if (key === 'm') {
         e.preventDefault();
         handleChantMichilSlogan();
@@ -1314,6 +1351,7 @@ export default function App() {
     handleCoRideOrInvitePassenger,
     handleToggleTrain,
     handlePlayerAttack,
+    handlePlayerJump,
     handleChantMichilSlogan,
     clearDrivingKeys,
     resetJoystickState,
@@ -1485,6 +1523,7 @@ export default function App() {
     worldRef.current = createInitialWorld();
     worldRef.current.player.isRunning = isRunningMode;
     worldRef.current.camera.angleLevel = cameraAngleLevel;
+    worldRef.current.camera.is3DMode = is3DMode;
     clearDrivingKeys();
     resetJoystickState();
     setPlayerHp(100);
@@ -1551,11 +1590,12 @@ export default function App() {
       className="fixed inset-0 overflow-hidden bg-[#070310] select-none font-sans text-white"
     >
       <div style={landscapeContainerStyle} className="overflow-hidden bg-[#090414]">
-        {/* 2D Top-Down Open World Baper City Canvas */}
+        {/* 2D Simulation & Optional 2D Top-Down Canvas */}
         <Canvas2DWorld
           worldRef={worldRef}
           gameState={gameState}
           isRotatedLandscape={isRotatedLandscape}
+          render2DCanvas={!is3DMode}
           onSyncHud={syncHudFromWorld}
           onGameEnd={(state) => {
             setEndReason(
@@ -1566,6 +1606,155 @@ export default function App() {
             setGameState(state);
           }}
         />
+
+        {/* Realistic 3D Dhaka City WebGL World */}
+        {is3DMode && (
+          <Three3DWorld
+            worldRef={worldRef}
+            isRotatedLandscape={isRotatedLandscape}
+          />
+        )}
+
+        {/* Google Maps Style Live Dhaka City Radar Minimap (Shown in 3D Mode) */}
+        {is3DMode && gameState === 'PLAYING' && (
+          <div className="absolute top-12 left-2 sm:top-14 sm:left-3 z-20 pointer-events-none w-[112px] h-[84px] sm:w-[156px] sm:h-[116px] rounded-xl bg-[#090d16]/95 border border-cyan-400/60 shadow-[0_4px_16px_rgba(0,0,0,0.6)] overflow-hidden">
+            {/* Ramna Green Park Zone */}
+            <div
+              className="absolute bg-emerald-500/35 border border-emerald-400/40 rounded-xs"
+              style={{
+                left: `${(CENTRAL_PARK_RECT.x / WORLD_WIDTH) * 100}%`,
+                top: `${(CENTRAL_PARK_RECT.y / WORLD_HEIGHT) * 100}%`,
+                width: `${(CENTRAL_PARK_RECT.w / WORLD_WIDTH) * 100}%`,
+                height: `${(CENTRAL_PARK_RECT.h / WORLD_HEIGHT) * 100}%`,
+              }}
+            />
+            {/* Perimeter Metro Rail Loop */}
+            <div
+              className="absolute border border-slate-400/55"
+              style={{
+                left: `${(TRAIN_LOOP_RECT.leftX / WORLD_WIDTH) * 100}%`,
+                top: `${(TRAIN_LOOP_RECT.topY / WORLD_HEIGHT) * 100}%`,
+                width: `${((TRAIN_LOOP_RECT.rightX - TRAIN_LOOP_RECT.leftX) / WORLD_WIDTH) * 100}%`,
+                height: `${((TRAIN_LOOP_RECT.bottomY - TRAIN_LOOP_RECT.topY) / WORLD_HEIGHT) * 100}%`,
+              }}
+            />
+            {/* Player's Own Home Villa Highlight */}
+            <div
+              className="absolute border border-cyan-300 bg-cyan-400/20"
+              style={{
+                left: `${(PLAYER_HOME_RECT.x / WORLD_WIDTH) * 100}%`,
+                top: `${(PLAYER_HOME_RECT.y / WORLD_HEIGHT) * 100}%`,
+                width: `${(PLAYER_HOME_RECT.w / WORLD_WIDTH) * 100}%`,
+                height: `${(PLAYER_HOME_RECT.h / WORLD_HEIGHT) * 100}%`,
+              }}
+            />
+            {/* Dhaka City Buildings */}
+            {BUILDINGS.map((b) => (
+              <div
+                key={b.id}
+                className="absolute bg-slate-600/75"
+                style={{
+                  left: `${(b.x / WORLD_WIDTH) * 100}%`,
+                  top: `${(b.y / WORLD_HEIGHT) * 100}%`,
+                  width: `${(b.w / WORLD_WIDTH) * 100}%`,
+                  height: `${(b.h / WORLD_HEIGHT) * 100}%`,
+                }}
+              />
+            ))}
+            {/* Moving Metro Train Blip */}
+            <div
+              className="absolute w-2 h-2 -ml-1 -mt-1 bg-sky-400 rounded-xs border border-white"
+              style={{
+                left: `${(worldRef.current.train.x / WORLD_WIDTH) * 100}%`,
+                top: `${(worldRef.current.train.y / WORLD_HEIGHT) * 100}%`,
+              }}
+            />
+            {/* Player Live GPS Position Pin */}
+            <div
+              className="absolute w-2.5 h-2.5 -ml-1.25 -mt-1.25 rounded-full bg-cyan-300 border border-slate-950 shadow-[0_0_8px_#00f0ff]"
+              style={{
+                left: `${(worldRef.current.player.x / WORLD_WIDTH) * 100}%`,
+                top: `${(worldRef.current.player.y / WORLD_HEIGHT) * 100}%`,
+              }}
+            />
+            <div className="absolute bottom-0.5 left-1 right-1 flex items-center justify-between text-[7.5px] sm:text-[8.5px] font-mono font-bold text-cyan-200 bg-black/65 px-1 rounded">
+              <span>📍 ঢাকা 3D ম্যাপ</span>
+              <span className="text-amber-300">শাহবাগ·মতিঝিল</span>
+            </div>
+          </div>
+        )}
+
+        {/* Free Fire / GTA Style Top 360° Compass Bar & Center Screen Aim Crosshair (Shown in 3D Mode) */}
+        {is3DMode && gameState === 'PLAYING' && (
+          <>
+            {/* Top-Center 360° Tactical Compass Strip */}
+            <div className="absolute top-11 sm:top-12 left-1/2 -translate-x-1/2 z-15 pointer-events-none flex flex-col items-center">
+              <div className="bg-[#0B0616]/85 border border-amber-400/55 rounded-full px-3 py-0.5 flex items-center gap-2 shadow-[0_2px_12px_rgba(0,0,0,0.65)]">
+                <span className="text-[8.5px] sm:text-[9.5px] font-mono text-slate-400">W</span>
+                <span className="text-[8.5px] sm:text-[9.5px] font-mono text-cyan-300 font-bold">NW</span>
+                <span className="text-[9.5px] sm:text-[10.5px] font-mono font-black text-amber-300 px-1.5 bg-amber-500/20 rounded border border-amber-400/50">
+                  {compassDeg >= 337 || compassDeg < 23
+                    ? 'N'
+                    : compassDeg < 68
+                      ? 'NE'
+                      : compassDeg < 113
+                        ? 'E'
+                        : compassDeg < 158
+                          ? 'SE'
+                          : compassDeg < 203
+                            ? 'S'
+                            : compassDeg < 248
+                              ? 'SW'
+                              : compassDeg < 293
+                                ? 'W'
+                                : 'NW'}{' '}
+                  · {compassDeg}°
+                </span>
+                <span className="text-[8.5px] sm:text-[9.5px] font-mono text-cyan-300 font-bold">NE</span>
+                <span className="text-[8.5px] sm:text-[9.5px] font-mono text-slate-400">E</span>
+              </div>
+              <span className="text-[8px] font-mono text-emerald-300/90 mt-0.5 bg-black/55 px-1.5 rounded">
+                ডান দিকে আঙুল টেনে ৩৬০° ক্যামেরা ঘোরান
+              </span>
+            </div>
+
+            {/* Free Fire / GTA Dynamic Center Screen Crosshair Reticle */}
+            {cameraAngleLevel <= 3 && (
+              <div className="absolute top-[44%] left-1/2 -translate-x-1/2 -translate-y-1/2 z-15 pointer-events-none flex flex-col items-center">
+                <div
+                  className={`relative w-7 h-7 sm:w-8 sm:h-8 rounded-full border transition-all duration-150 flex items-center justify-center ${
+                    targetNpc && worldRef.current.nearestNpcDist < 140
+                      ? 'border-rose-500/90 scale-110 shadow-[0_0_12px_rgba(244,63,94,0.85)]'
+                      : nearestVehicle
+                        ? 'border-cyan-400/90 scale-105 shadow-[0_0_10px_rgba(0,240,255,0.75)]'
+                        : 'border-white/65'
+                  }`}
+                >
+                  {/* Center Dot */}
+                  <div
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      targetNpc && worldRef.current.nearestNpcDist < 140
+                        ? 'bg-rose-500'
+                        : nearestVehicle
+                          ? 'bg-cyan-400'
+                          : 'bg-amber-300'
+                    }`}
+                  />
+                  {/* 4 Crosshair Ticks */}
+                  <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-0.5 h-2 bg-white/85" />
+                  <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-0.5 h-2 bg-white/85" />
+                  <div className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-2 h-0.5 bg-white/85" />
+                  <div className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-2 h-0.5 bg-white/85" />
+                </div>
+                {targetNpc && worldRef.current.nearestNpcDist < 140 && (
+                  <span className="mt-1 px-1.5 py-0.5 rounded bg-black/75 border border-rose-500/60 text-[8.5px] font-display font-bold text-rose-200 whitespace-nowrap">
+                    🎯 {targetNpc.bengaliName.split('·')[0]}
+                  </span>
+                )}
+              </div>
+            )}
+          </>
+        )}
 
         {/* Flashing Public Mob & Police Siren Chase Warning Banner */}
         {(mobAlertSeconds > 0 || mobChasersCount > 0) && gameState === 'PLAYING' && (
@@ -1581,7 +1770,7 @@ export default function App() {
         <header className="absolute top-0 left-0 right-0 z-20 pointer-events-none px-2 py-1.5 sm:px-3 sm:py-2 flex items-start justify-between gap-1.5">
           {/* Top-Left: Compact Player Status Pill + Mission Toggle */}
           <div className="flex items-center gap-1.5 pointer-events-auto">
-            <div className="bg-[#0B0616]/90 backdrop-blur-md border border-emerald-500/45 rounded-xl px-2.5 py-1.5 shadow-[0_0_16px_rgba(16,185,129,0.2)] flex flex-col gap-0.5 min-w-[148px] sm:min-w-[185px]">
+            <div className="bg-[#0B0616]/95 border border-emerald-500/45 rounded-xl px-2.5 py-1.5 shadow-[0_0_16px_rgba(16,185,129,0.2)] flex flex-col gap-0.5 min-w-[148px] sm:min-w-[185px]">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-display text-[10px] sm:text-[11px] font-black tracking-wide text-amber-300 truncate">
                   🏙️ বাপের সিটি
@@ -1629,10 +1818,10 @@ export default function App() {
                 setMissionDrawerOpen((prev) => !prev);
                 setChatDrawerOpen(false);
               }}
-              className={`px-2 py-1.5 rounded-xl backdrop-blur-md border text-[10px] font-display font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+              className={`px-2 py-1.5 rounded-xl border text-[10px] font-display font-bold flex items-center gap-1 cursor-pointer transition-colors ${
                 missionDrawerOpen
                   ? 'bg-amber-500 text-slate-950 border-white shadow-[0_0_16px_rgba(245,158,11,0.7)]'
-                  : 'bg-[#0B0616]/90 text-amber-300 border-amber-500/45 hover:border-amber-400'
+                  : 'bg-[#0B0616]/95 text-amber-300 border-amber-500/45 hover:border-amber-400'
               }`}
               title="আপনার মিশন লিস্ট দেখুন"
             >
@@ -1651,7 +1840,7 @@ export default function App() {
                 setChatDrawerOpen(true);
                 setMissionDrawerOpen(false);
               }}
-              className="pointer-events-auto max-w-[38%] sm:max-w-[44%] bg-[#0B0616]/90 backdrop-blur-md border border-cyan-500/40 hover:border-cyan-400 rounded-xl px-2.5 py-1 flex items-center gap-1.5 shadow-[0_0_14px_rgba(0,240,255,0.12)] cursor-pointer truncate"
+              className="pointer-events-auto max-w-[36%] sm:max-w-[42%] bg-[#0B0616]/95 border border-cyan-500/40 hover:border-cyan-400 rounded-xl px-2.5 py-1 flex items-center gap-1.5 shadow-[0_0_14px_rgba(0,240,255,0.12)] cursor-pointer truncate"
             >
               <MessageSquare className="w-3 h-3 text-cyan-400 shrink-0" />
               <div className="truncate text-left">
@@ -1680,10 +1869,35 @@ export default function App() {
             </button>
           )}
 
-          {/* Top-Right: 5-Level Camera View Mode + Compact Control Icons */}
+          {/* Top-Right: 3D/2D Mode Switch + 5-Level Camera View Mode + Compact Control Icons */}
           <div className="flex items-center gap-1 pointer-events-auto flex-wrap justify-end">
+            {/* 3D / 2D Mode Toggle Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setIs3DMode((prev) => {
+                  const next = !prev;
+                  worldRef.current.camera.is3DMode = next;
+                  setCommunityBannerText(
+                    next
+                      ? '🏙️ GTA / Free Fire ৩ডি মোড (3D TPS Mode) চালু হয়েছে! ডান দিকে আঙুল টেনে ৩৬০° ক্যামেরা ঘোরান ও বাম জয়স্টিক দিয়ে মুভ করুন।'
+                      : '🗺️ ক্লাসিক ২ডি টপ-ডাউন (2D Mode) ভিউ চালু হয়েছে!'
+                  );
+                  return next;
+                });
+              }}
+              className={`px-2 py-1 rounded-xl border font-display font-black text-[9.5px] sm:text-[10.5px] flex items-center gap-1 cursor-pointer transition-all ${
+                is3DMode
+                  ? 'bg-gradient-to-r from-amber-400 via-orange-400 to-yellow-300 text-slate-950 border-white shadow-[0_0_14px_rgba(251,191,36,0.75)]'
+                  : 'bg-[#0B0616]/95 text-amber-300 border-amber-500/50 hover:border-amber-400'
+              }`}
+              title="3D এবং 2D গ্রাফিক্স মোড পরিবর্তন করুন"
+            >
+              <span>{is3DMode ? '🏙️ 3D মোড' : '🗺️ 2D মোড'}</span>
+            </button>
+
             {/* 5-Level Camera Angle Selector (১ থেকে ৫ পর্যন্ত ক্যামেরা ভিউ মোড) */}
-            <div className="flex items-center bg-[#0B0616]/92 backdrop-blur-md border border-emerald-500/50 rounded-xl p-0.5 shadow-[0_0_14px_rgba(16,185,129,0.2)]">
+            <div className="flex items-center bg-[#0B0616]/95 border border-emerald-500/50 rounded-xl p-0.5 shadow-[0_0_14px_rgba(16,185,129,0.2)]">
               <button
                 type="button"
                 onClick={handleCycleCameraAngle}
@@ -2018,21 +2232,21 @@ export default function App() {
                         ? 'bg-gradient-to-b from-amber-400 to-orange-500 text-slate-950 border-white shadow-[0_0_22px_rgba(245,158,11,0.85)]'
                         : 'bg-[#0B0616]/90 text-cyan-300 border-cyan-400/65 shadow-[0_0_14px_rgba(0,240,255,0.2)]'
                     }`}
-                    title="হাঁটা / দৌড়ানো মোড পরিবর্তন করুন"
+                    title="হাঁটা / স্প্রিন্ট দৌড়ানো মোড পরিবর্তন করুন"
                   >
-                    <span className="text-xs sm:text-base leading-none">{isRunningMode ? '🏃' : '🚶'}</span>
-                    <span className="uppercase tracking-tighter">{isRunningMode ? 'রান চালু' : 'রান'}</span>
+                    <span className="text-xs sm:text-base leading-none">{isRunningMode ? '⚡' : '🏃'}</span>
+                    <span className="uppercase tracking-tighter">{isRunningMode ? 'স্প্রিন্ট' : 'রান'}</span>
                   </button>
                 )}
               </div>
             )}
 
-            {/* Bottom-Right Action & Driving Pedal Buttons */}
+            {/* Bottom-Right Free Fire / GTA Radial Action Cluster & Driving Pedals */}
             <div
               onContextMenu={(e) => e.preventDefault()}
-              className="absolute bottom-2.5 right-2.5 sm:bottom-5 sm:right-6 z-20 flex items-end gap-1 sm:gap-2.5 pointer-events-auto select-none"
+              className="absolute bottom-2.5 right-2.5 sm:bottom-5 sm:right-6 z-20 flex items-end gap-1.5 sm:gap-2.5 pointer-events-auto select-none"
             >
-              <div className="flex flex-col items-end gap-0.5 sm:gap-1">
+              <div className="flex flex-col items-end gap-1 sm:gap-1.5">
                 {!inVehicle &&
                   (currentInteriorZone === 'PLAYER_HOME' ||
                     currentInteriorZone === 'GARMENTS' ||
@@ -2142,26 +2356,45 @@ export default function App() {
                       e.stopPropagation();
                       handleToggleVehicle();
                     }}
-                    className="flex items-center gap-1 px-2 py-1 sm:px-3 sm:py-2 rounded-xl font-display font-bold text-[9px] sm:text-xs bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-[0_0_16px_rgba(0,240,255,0.55)] border border-white/85 active:scale-95 transition-transform cursor-pointer touch-none select-none"
+                    className="flex items-center gap-1 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-full font-display font-bold text-[9.5px] sm:text-xs bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-[0_0_18px_rgba(0,240,255,0.65)] border-2 border-white active:scale-95 transition-transform cursor-pointer touch-none select-none"
                   >
-                    <CarFront className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
-                    <span>{inVehicle ? 'নামুন' : `${nearestVehicle?.name.split(' ')[0] || 'গাড়ি'}`}</span>
+                    <CarFront className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                    <span>{inVehicle ? 'গাড়ি নামুন' : `🚗 ${nearestVehicle?.name.split(' ')[0] || 'গাড়ি'}`}</span>
                   </button>
                 )}
 
                 {!isPlayerDriving && (
-                  <button
-                    type="button"
-                    onPointerDown={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleChantMichilSlogan();
-                    }}
-                    className="flex items-center gap-1 px-2 py-1 sm:px-3 sm:py-2 rounded-xl font-display font-bold text-[9px] sm:text-[11px] bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.45)] border border-white/80 active:scale-95 transition-transform cursor-pointer touch-none select-none"
-                  >
-                    <Megaphone className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
-                    <span>স্লোগান</span>
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleChantMichilSlogan();
+                      }}
+                      className="flex items-center gap-1 px-2 py-1 sm:px-3 sm:py-2 rounded-full font-display font-bold text-[9px] sm:text-[11px] bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.45)] border border-white/85 active:scale-95 transition-transform cursor-pointer touch-none select-none"
+                    >
+                      <Megaphone className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                      <span>স্লোগান</span>
+                    </button>
+
+                    {/* Free Fire / GTA Dedicated 3D Jump Button (লাফ) */}
+                    {!inTrain && (
+                      <button
+                        type="button"
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handlePlayerJump();
+                        }}
+                        className="w-9 h-9 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-sky-400 via-cyan-500 to-indigo-600 text-white shadow-[0_0_18px_rgba(14,165,233,0.75)] border-2 border-white/90 flex flex-col items-center justify-center active:scale-90 transition-transform cursor-pointer touch-none select-none"
+                        title="লাফ দিন (Jump - J)"
+                      >
+                        <span className="text-xs sm:text-sm leading-none">🦘</span>
+                        <span className="font-display text-[7px] sm:text-[8.5px] font-extrabold">লাফ</span>
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -2182,14 +2415,14 @@ export default function App() {
                     }}
                     onPointerCancel={() => setDrivingDirection('forward', false)}
                     onLostPointerCapture={() => setDrivingDirection('forward', false)}
-                    className={`w-10 h-9 sm:w-20 sm:h-16 rounded-xl border-2 flex flex-col items-center justify-center touch-none select-none cursor-pointer transition-transform ${
+                    className={`w-11 h-10 sm:w-20 sm:h-16 rounded-xl border-2 flex flex-col items-center justify-center touch-none select-none cursor-pointer transition-transform ${
                       driveBtnState.forward
                         ? 'bg-emerald-400 text-slate-950 border-white scale-95 shadow-[0_0_24px_rgba(16,185,129,0.95)]'
                         : 'bg-gradient-to-b from-emerald-500 to-teal-600 text-slate-950 border-white/90 shadow-[0_0_16px_rgba(16,185,129,0.5)]'
                     }`}
                   >
                     <ArrowUp className="w-3.5 h-3.5 sm:w-6 sm:h-6 stroke-[2.8]" />
-                    <span className="font-display text-[7.5px] sm:text-[11px] font-black">সামনে</span>
+                    <span className="font-display text-[7.5px] sm:text-[11px] font-black">গ্যাস</span>
                   </button>
 
                   <button
@@ -2207,18 +2440,19 @@ export default function App() {
                     }}
                     onPointerCancel={() => setDrivingDirection('backward', false)}
                     onLostPointerCapture={() => setDrivingDirection('backward', false)}
-                    className={`w-10 h-8 sm:w-20 sm:h-14 rounded-xl border-2 flex flex-col items-center justify-center touch-none select-none cursor-pointer transition-transform ${
+                    className={`w-11 h-8 sm:w-20 sm:h-14 rounded-xl border-2 flex flex-col items-center justify-center touch-none select-none cursor-pointer transition-transform ${
                       driveBtnState.backward
                         ? 'bg-rose-500 text-white border-white scale-95 shadow-[0_0_22px_rgba(244,63,94,0.9)]'
                         : 'bg-[#0B0616]/90 text-rose-300 border-rose-500/75 shadow-[0_0_14px_rgba(244,63,94,0.3)]'
                     }`}
                   >
                     <ArrowDown className="w-2.5 h-2.5 sm:w-5 sm:h-5 stroke-[2.5]" />
-                    <span className="font-display text-[7.5px] sm:text-[10.5px] font-extrabold">পিছনে</span>
+                    <span className="font-display text-[7.5px] sm:text-[10.5px] font-extrabold">ব্রেক</span>
                   </button>
                 </div>
               )}
 
+              {/* Primary Free Fire / GTA Large Fire / Punch / Horn Button */}
               <button
                 type="button"
                 onPointerDown={(e) => {
@@ -2226,17 +2460,17 @@ export default function App() {
                   e.stopPropagation();
                   handlePlayerAttack();
                 }}
-                className="w-10 h-10 sm:w-16 sm:h-16 rounded-full bg-gradient-to-br from-rose-600 via-pink-600 to-amber-500 text-white shadow-[0_0_24px_rgba(244,63,94,0.7)] border-2 border-white/90 flex flex-col items-center justify-center active:scale-90 transition-transform cursor-pointer touch-none select-none shrink-0"
+                className="w-13 h-13 sm:w-18 sm:h-18 rounded-full bg-gradient-to-br from-rose-600 via-orange-500 to-amber-400 text-white shadow-[0_0_26px_rgba(244,63,94,0.8)] border-2 border-white flex flex-col items-center justify-center active:scale-90 transition-transform cursor-pointer touch-none select-none shrink-0 ring-4 ring-rose-500/30"
               >
-                <Swords className="w-3 h-3 sm:w-5 sm:h-5" />
-                <span className="font-display text-[7px] sm:text-[9.5px] font-extrabold tracking-wider uppercase mt-0.5">
+                <Swords className="w-4 h-4 sm:w-6 sm:h-6 drop-shadow" />
+                <span className="font-display text-[8px] sm:text-[10px] font-black tracking-wider uppercase mt-0.5">
                   {inVehicle?.type === 'RICKSHAW'
                     ? 'বেল'
                     : inVehicle?.type === 'POLICE_CRUISER'
                       ? 'সাইরেন'
                       : inVehicle
                         ? 'হর্ন'
-                        : 'মারুন'}
+                        : 'ফায়ার/ঘুষি'}
                 </span>
               </button>
             </div>

@@ -292,6 +292,8 @@ export interface PlayerState {
   maxHp: number;
   money: number; // পকেটের টাকা (৳)
   isRunning?: boolean; // নরমাল হাঁটা (false) বনাম রান মোড (true)
+  jumpY?: number; // থ্রিডি মোডে লাফানোর উচ্চতা (Jump Height)
+  jumpVy?: number; // থ্রিডি মোডে লাফানোর উল্লম্ব গতি
   inVehicleId: string | null;
   inVehicleSeat: 'driver' | 'passenger' | null;
   inTrain: boolean;
@@ -376,6 +378,9 @@ export interface WorldSimulationRef {
     shake: number;
     angleLevel?: 1 | 2 | 3 | 4 | 5;
     zoom?: number;
+    is3DMode?: boolean;
+    yaw3D?: number;
+    pitch3D?: number;
   };
   hitstopTimer: number;
   mobAlertTimer: number;

@@ -45,6 +45,7 @@ interface Canvas2DWorldProps {
   worldRef: React.MutableRefObject<WorldSimulationRef>;
   gameState: GameState;
   isRotatedLandscape?: boolean;
+  render2DCanvas?: boolean;
   onSyncHud: () => void;
   onGameEnd: (state: 'VICTORY' | 'GAME_OVER') => void;
 }
@@ -288,11 +289,36 @@ export function stepWorldSimulation(
     kbY *= inv;
   }
 
-  let inputX = kbX;
-  let inputY = kbY;
+  let rawInputX = kbX;
+  let rawInputY = kbY;
   if (joystick.active && (Math.abs(joystick.dx) > 0.05 || Math.abs(joystick.dy) > 0.05)) {
-    inputX = joystick.dx;
-    inputY = joystick.dy;
+    rawInputX = joystick.dx;
+    rawInputY = joystick.dy;
+  }
+
+  // In 3D Mode (GTA / Free Fire TPS view), transform joystick/WASD relative to 3D Camera Aim Yaw!
+  let inputX = rawInputX;
+  let inputY = rawInputY;
+  if (w.camera.is3DMode && (w.camera.angleLevel ?? 1) <= 3 && !player.inVehicleId) {
+    const camYaw = w.camera.yaw3D ?? Math.PI / 2;
+    const forwardInput = -rawInputY; // Pushing joystick UP or pressing W = +1 Forward
+    const rightInput = rawInputX;    // Pushing joystick RIGHT or pressing D = +1 Right Strafe
+    const fwdX = Math.cos(camYaw);
+    const fwdY = Math.sin(camYaw);
+    const rightX = -Math.sin(camYaw);
+    const rightY = Math.cos(camYaw);
+    inputX = fwdX * forwardInput + rightX * rightInput;
+    inputY = fwdY * forwardInput + rightY * rightInput;
+  }
+
+  // Step 3D Jump Vertical Physics (Free Fire / GTA Jump & Gravity)
+  if ((player.jumpY ?? 0) > 0 || (player.jumpVy ?? 0) !== 0) {
+    player.jumpY = (player.jumpY ?? 0) + (player.jumpVy ?? 0) * dt;
+    player.jumpVy = (player.jumpVy ?? 0) - 520 * dt;
+    if ((player.jumpY ?? 0) <= 0) {
+      player.jumpY = 0;
+      player.jumpVy = 0;
+    }
   }
 
   if (player.punchTimer > 0) player.punchTimer = Math.max(0, player.punchTimer - dt);
@@ -489,20 +515,29 @@ export function stepWorldSimulation(
       }
     }
   } else {
-    // Player on-foot movement: Normal Walk Mode (132 px/s) vs Run Button Mode (258 px/s)
+    // Player on-foot movement: Normal Walk Mode (135 px/s) vs Run / Auto-Sprint Mode (264 px/s)
+    // In 3D Mode, pushing joystick all the way up (rawInputY < -0.84) automatically engages Free Fire Sprint!
+    const autoJoystickSprint =
+      Boolean(w.camera.is3DMode) && joystick.active && rawInputY < -0.84;
     const isRunningMode = Boolean(
       player.isRunning ||
+        autoJoystickSprint ||
         keys['ShiftLeft'] ||
         keys['ShiftRight'] ||
         keys['shift']
     );
-    const moveSpeed = isRunningMode ? 258 : 132;
+    const moveSpeed = isRunningMode ? 264 : 135;
     player.vx = inputX * moveSpeed;
     player.vy = inputY * moveSpeed;
 
     const inputMag = Math.hypot(inputX, inputY);
     if (inputMag > 0.05) {
-      player.angle = Math.atan2(inputY, inputX);
+      const targetHeading = Math.atan2(inputY, inputX);
+      // Smooth character body turn in 3D mode (like Free Fire / GTA)
+      let diff = targetHeading - player.angle;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      player.angle += diff * Math.min(1, dt * 15);
       player.walkCycle += dt * (isRunningMode ? 14.5 : 7.5);
 
       // Subtle sprint dust trail when running fast in Run Mode
@@ -1949,16 +1984,29 @@ export const Canvas2DWorld: React.FC<Canvas2DWorldProps> = ({
   worldRef,
   gameState,
   isRotatedLandscape = false,
+  render2DCanvas = true,
   onSyncHud,
   onGameEnd,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const patternsRef = useRef<ProceduralPatterns | null>(null);
-  const stateRef = useRef({ gameState, isRotatedLandscape, onSyncHud, onGameEnd });
+  const stateRef = useRef({
+    gameState,
+    isRotatedLandscape,
+    render2DCanvas,
+    onSyncHud,
+    onGameEnd,
+  });
 
   useEffect(() => {
-    stateRef.current = { gameState, isRotatedLandscape, onSyncHud, onGameEnd };
-  }, [gameState, isRotatedLandscape, onSyncHud, onGameEnd]);
+    stateRef.current = {
+      gameState,
+      isRotatedLandscape,
+      render2DCanvas,
+      onSyncHud,
+      onGameEnd,
+    };
+  }, [gameState, isRotatedLandscape, render2DCanvas, onSyncHud, onGameEnd]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -2005,6 +2053,7 @@ export const Canvas2DWorld: React.FC<Canvas2DWorldProps> = ({
 
       const {
         gameState: currentGameState,
+        render2DCanvas: shouldDraw2D,
         onSyncHud: syncHud,
         onGameEnd: endGame,
       } = stateRef.current;
@@ -2012,8 +2061,9 @@ export const Canvas2DWorld: React.FC<Canvas2DWorldProps> = ({
       const { w: logicalW, h: logicalH } = getLogicalDimensions();
 
       if (
-        canvas.width !== Math.max(1, Math.floor(logicalW * dpr)) ||
-        canvas.height !== Math.max(1, Math.floor(logicalH * dpr))
+        shouldDraw2D &&
+        (canvas.width !== Math.max(1, Math.floor(logicalW * dpr)) ||
+          canvas.height !== Math.max(1, Math.floor(logicalH * dpr)))
       ) {
         canvas.width = Math.max(1, Math.floor(logicalW * dpr));
         canvas.height = Math.max(1, Math.floor(logicalH * dpr));
@@ -2028,15 +2078,17 @@ export const Canvas2DWorld: React.FC<Canvas2DWorldProps> = ({
           syncHud();
         }
 
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        draw2DWorld(
-          ctx,
-          logicalW,
-          logicalH,
-          worldRef.current,
-          patternsRef.current,
-          now / 1000
-        );
+        if (shouldDraw2D) {
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          draw2DWorld(
+            ctx,
+            logicalW,
+            logicalH,
+            worldRef.current,
+            patternsRef.current,
+            now / 1000
+          );
+        }
       } catch (err) {
         console.error('Frame recovery:', err);
       }
@@ -2050,7 +2102,16 @@ export const Canvas2DWorld: React.FC<Canvas2DWorldProps> = ({
     };
   }, [worldRef]);
 
-  return <canvas ref={canvasRef} className="block w-full h-full touch-none" />;
+  return (
+    <canvas
+      ref={canvasRef}
+      className={
+        render2DCanvas
+          ? 'block w-full h-full touch-none'
+          : 'hidden pointer-events-none w-0 h-0'
+      }
+    />
+  );
 };
 
 function draw2DWorld(
